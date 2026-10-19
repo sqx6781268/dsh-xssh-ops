@@ -135,7 +135,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 | `xssh_command` | `op: list \| output`（命令台账与单条命令输出） |
 | `xssh_exec_background` | 后台任务下发（远端临时目录优先，降级会明确告警） |
 
-**功能包 6 个**
+**功能包 7 个**
 
 | 工具 | 用途 |
 | --- | --- |
