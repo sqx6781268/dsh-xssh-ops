@@ -138,9 +138,7 @@ const terminalPool = createTerminalPool({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      // 2000 行：改字号时 xterm 会重排整个 scrollback，5000 行时桌面实测
-      // 2.8s（用户 2026-10-20）；2000 行能把重排压到约 1/3。
-      scrollback: 2000,
+      scrollback: 5000,
       // The search addon's match HIGHLIGHTS are gated behind this flag; the
       // search itself still works, but without it every find throws
       // "proposed API" and the reader sees no matches at all.
@@ -247,8 +245,15 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     try {
       const term = entryRef.current?.term;
       if (term !== undefined && term !== null) {
-        try { term.options.fontSize = value.size; } catch { /* 忽略个别终端的异常 */ }
-        try { term.options.fontFamily = value.family; } catch { /* 同上 */ }
+        // 只赋真正变化的选项：xterm 的每个 options setter 都会触发一次完整的
+        // 尺寸重算/重排，fontFamily 不变时再赋值等于白做一次（桌面实测两次
+        // 赋值合计 2.8s）。
+        try {
+          if (term.options.fontSize !== value.size) term.options.fontSize = value.size;
+        } catch { /* 忽略个别终端的异常 */ }
+        try {
+          if (term.options.fontFamily !== value.family) term.options.fontFamily = value.family;
+        } catch { /* 同上 */ }
       }
     } finally {
       const __fontDt = (globalThis.performance?.now?.() ?? Date.now()) - __fontT0;
@@ -2463,7 +2468,9 @@ const panelStyles = {
   viewTabActive: { padding: "2px 8px", fontSize: 12, borderRadius: 4, cursor: "pointer", background: "rgba(45,108,223,.18)", color: "var(--dsh-xssh-ops-text, #d7dbe2)", border: "1px solid #2d6cdf" },
   viewNote: { fontSize: 11, color: "var(--dsh-xssh-ops-muted, #8b93a1)" },
   emptyState: { margin: "auto", fontSize: 12, color: "var(--dsh-xssh-ops-muted, #8b93a1)", textAlign: "center" },
-  xtermWrap: { flex: 1, minWidth: 0, overflow: "hidden" },
+  // contain: layout paint —— xterm 改字号时读取/改写布局只在容器内生效，
+  // 不再让宿主的大页面（长对话）参与全页 reflow（用户 2026-10-20 桌面实测卡 3s）。
+  xtermWrap: { flex: 1, minWidth: 0, overflow: "hidden", contain: "layout paint" },
   xtermHost: { position: "relative", display: "flex", flex: 1, minWidth: 0, minHeight: 0 },
   // 终端右键菜单与提示条（用户 2026-10-18）。
   termMenu: { position: "fixed", zIndex: 96, minWidth: 150, padding: 4, borderRadius: 7, background: "#2b2f36", border: "1px solid rgba(0,0,0,.3)", boxShadow: "0 8px 24px rgba(0,0,0,.3)" },
