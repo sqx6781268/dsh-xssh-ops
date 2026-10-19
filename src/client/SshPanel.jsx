@@ -138,7 +138,10 @@ const terminalPool = createTerminalPool({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      scrollback: 5000,
+      // 500 行：xterm 改字号会重排整个 scrollback，成本随行数线性增长
+      // （2000 行≈1.3s、5000 行≈2.0s，用户 2026-10-20 实测）；完整历史仍在
+      // 「日志」页签的会话录制里，终端只保留最近 500 行用于回看。
+      scrollback: 500,
       // The search addon's match HIGHLIGHTS are gated behind this flag; the
       // search itself still works, but without it every find throws
       // "proposed API" and the reader sees no matches at all.
