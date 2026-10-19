@@ -241,10 +241,16 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     // 只即时更新**当前可见**终端：其它池化终端在下一次挂载时按 font 值应用（mount 里
     // 已有这段赋值）。此前每次调整都对池里所有终端逐台重排（xterm 字号变化会重新测量
     // 字符并重绘），滚轮/连点 +/- 时的卡顿主要来自这里。
-    const term = entryRef.current?.term;
-    if (term !== undefined && term !== null) {
-      try { term.options.fontSize = value.size; } catch { /* 忽略个别终端的异常 */ }
-      try { term.options.fontFamily = value.family; } catch { /* 同上 */ }
+    const __fontT0 = (globalThis.performance?.now?.() ?? Date.now());
+    try {
+      const term = entryRef.current?.term;
+      if (term !== undefined && term !== null) {
+        try { term.options.fontSize = value.size; } catch { /* 忽略个别终端的异常 */ }
+        try { term.options.fontFamily = value.family; } catch { /* 同上 */ }
+      }
+    } finally {
+      const __fontDt = (globalThis.performance?.now?.() ?? Date.now()) - __fontT0;
+      if (__fontDt > 50) console.warn(`[xssh-font] set options ${__fontDt.toFixed(0)}ms`);
     }
     // 持久化 + 尺寸适配都防抖：连续滚轮/连点只在停下来后 fit 一次并写一次设置。
     // （每次 fontSize 变化后立刻 fit 会向远端发 PTY resize，shell 收到 SIGWINCH
@@ -252,7 +258,10 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     if (fontPersistTimer.current !== null) clearTimeout(fontPersistTimer.current);
     fontPersistTimer.current = setTimeout(() => {
       fontPersistTimer.current = null;
+      const __fitT0 = (globalThis.performance?.now?.() ?? Date.now());
       try { entryRef.current?.fit?.fit?.(); } catch { /* 忽略 */ }
+      const __fitDt = (globalThis.performance?.now?.() ?? Date.now()) - __fitT0;
+      if (__fitDt > 50) console.warn(`[xssh-font] fit ${__fitDt.toFixed(0)}ms`);
       onFontChange?.(fontValueRef.current);
     }, 200);
   };
@@ -1465,7 +1474,11 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
     if (fontSaveTimerRef.current !== null) clearTimeout(fontSaveTimerRef.current);
     fontSaveTimerRef.current = setTimeout(() => {
       fontSaveTimerRef.current = null;
-      void api.keepAliveSave({ terminalFont: next }).catch(() => {});
+      const __saveT0 = (globalThis.performance?.now?.() ?? Date.now());
+      void api.keepAliveSave({ terminalFont: next }).then(() => {
+        const __saveDt = (globalThis.performance?.now?.() ?? Date.now()) - __saveT0;
+        if (__saveDt > 100) console.warn(`[xssh-font] keepAliveSave ${__saveDt.toFixed(0)}ms`);
+      }).catch(() => {});
     }, 500);
   }, [api]);
   useEffect(() => {
