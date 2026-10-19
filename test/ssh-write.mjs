@@ -139,7 +139,9 @@ function joined(writes) {
   assert.ok(sshWrite, "xssh_write tool is registered");
 
   const withEnter = await sshWrite.execute({ input: "ls -la" });
-  assert.deepEqual(withEnter, { written: "ls -la\r".length }, "press_enter defaults to true and appends \\r");
+  // v0.1.4：回车提交的命令同时返回台账 commandId（xssh_read command_id 用它等结果）。
+  assert.equal(withEnter.written, "ls -la\r".length, "press_enter defaults to true and appends \\r");
+  assert.ok(typeof withEnter.commandId === "string" && withEnter.commandId !== "", "submitted command returns a ledger id");
   assert.ok(joined(writes).endsWith("\r"));
 
   const raw = await sshWrite.execute({ input: "y", press_enter: false });

@@ -1540,8 +1540,9 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
   const [broadcastHintDismissed, setBroadcastHintDismissed] = useState(false);
   // 文件页签的「编辑」→ 编辑器页签（用户 2026-10-19）。
   const [idePendingPath, setIdePendingPath] = useState(null);
-  // 终端里点击文件名 → 文件页签打开（用户 2026-10-19）。
-  const [pendingFileName, setPendingFileName] = useState(null);
+  // 终端里点击文件名 → 文件页签打开（用户 2026-10-19）：
+  // 带上终端当时的 cwd，文件页签先切到该目录再找文件（用户 2026-10-20 反馈不跳目录）。
+  const [pendingFile, setPendingFile] = useState(null);
   // 终端文件名识别开关（设置页可关，用户 2026-10-19），默认开。
   const [terminalFileLinks, setTerminalFileLinks] = useState(true);
   // 文件页签跟随终端路径（用户 2026-10-19）；关掉时终端文件名识别失效。
@@ -2059,7 +2060,7 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
                         onFontChange={changeTerminalFont}
                         fileLinksEnabled={terminalFileLinks && filesFollowTerminal}
                         onCwdChange={setTerminalCwd}
-                        onOpenFileToken={(name) => { setTab("files"); setPendingFileName(name); }}
+                        onOpenFileToken={(name) => { setTab("files"); setPendingFile({ name, cwd: terminalCwd }); }}
                         lightTheme={lightTheme}
                         onInsertDraft={(text) => setDraftInsert({ text, nonce: Date.now() })}
                         onReady={(sid, termApi) => {
@@ -2104,8 +2105,8 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
                   connectionId={active.connectionId}
                   onEditFile={(path) => { setTab("ide"); setIdePendingPath(path); }}
                   followPath={filesFollowTerminal ? terminalCwd : null}
-                  pendingFileName={pendingFileName}
-                  onPendingConsumed={() => setPendingFileName(null)}
+                  pendingFile={pendingFile}
+                  onPendingConsumed={() => setPendingFile(null)}
                   onCd={cdFromFiles}
                   initialPath={ui.projectTarget?.connectionId === active.connectionId ? ui.projectTarget.path : "/"}
                 />

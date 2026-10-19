@@ -3978,6 +3978,7 @@ export default class SshOpsService extends TypertRemoteService {
     if (conn === void 0) return { ok: false, error: fail("no-connection", `connection "${connectionId}" does not exist`) };
     let written = 0;
     let blockedReason = null;
+    let commandId = null;
     const touchedSessions = [];
     for (const sessionId of conn.sessions) {
       const session = this.sessions.get(sessionId);
@@ -4002,13 +4003,70 @@ export default class SshOpsService extends TypertRemoteService {
         for (const session of touchedSessions) {
           try {
             const ledger = this.ledgerFor(session);
-            ledger.open({ text: command, markLine: this.lineMark(session), source: "terminal-direct", pressEnter: true });
+            const record = ledger.open({ text: command, markLine: this.lineMark(session), source: "terminal-direct", pressEnter: true });
+            // 把台账 ID 回给工具层：xssh_write 之后可用 xssh_read command_id 等它跑完再取输出，
+            // 不必让 AI 自己 sleep 轮询（用户 2026-10-20）。
+            commandId ??= record?.commandId ?? null;
             this.scheduleIdleClose(session);
           } catch { /* 台账是叠加层 */ }
         }
       }
     }
-    return { ok: true, value: { written } };
+    return { ok: true, value: commandId === null ? { written } : { written, commandId } };
+  }
+
+  /**
+   * 按台账 ID 读一条命令的输出（用户 2026-10-20）。
+   * 先等命令闭口（exit/idle/exec），再按它的行区间读行号日志，AI 不再手写等待逻辑。
+   */
+  async readCommandOutput(request = {}) {
+    const commandId = String(request.commandId ?? "");
+    if (commandId === "") return { ok: false, error: fail("bad-request", "commandId is required") };
+    const waitMs = Math.min(Math.max(Number(request.waitMs ?? 15000) || 0, 0), 60000);
+    const find = () => {
+      for (const session of this.sessions.values()) {
+        const ledger = session.commandLedger;
+        if (ledger === undefined || ledger === null) continue;
+        const record = ledger.byId(commandId);
+        if (record !== undefined && record !== null) return { session, record };
+      }
+      return null;
+    };
+    let found = find();
+    if (found === null) return { ok: false, error: fail("no-command", `command ${commandId} not found in the line journal`) };
+    const deadline = Date.now() + waitMs;
+    while (found.record.status === "running" && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const next = find();
+      if (next !== null) found = next;
+    }
+    const timedOut = found.record.status === "running";
+    const maxBytes = Math.min(Math.max(Number(request.maxBytes ?? 24 * 1024) || 24 * 1024, 1024), 48 * 1024);
+    const journal = found.session.lineJournal;
+    const base = {
+      commandId,
+      status: found.record.status,
+      exitCode: found.record.exitCode ?? null,
+      startLine: found.record.startLine ?? null,
+      endLine: found.record.endLine ?? null,
+      closedBy: found.record.closedBy ?? null,
+      timedOut
+    };
+    if (journal === undefined || journal === null || found.record.startLine === null || found.record.startLine === undefined) {
+      return { ok: true, value: { ...base, text: "", truncated: false, evicted: false } };
+    }
+    const read = journal.read({ fromLine: found.record.startLine, toLine: found.record.endLine ?? undefined, maxBytes });
+    return {
+      ok: true,
+      value: {
+        ...base,
+        text: read.text,
+        truncated: read.truncated,
+        evicted: read.evicted,
+        firstLine: read.firstLine,
+        lastLine: read.lastLine
+      }
+    };
   }
 
   /** Add a local policy notice to the same buffer rendered by the terminal. */

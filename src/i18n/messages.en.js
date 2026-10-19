@@ -1151,4 +1151,5 @@ export const en = {
   "· 已连接": "· connected",
   "更新": "updated",
   "已保存的资源（${lines.length}）：": "Saved resources (${lines.length}):",
+  " · 等待超时（命令可能还在跑）": " · wait timed out (command may still be running)",
 };

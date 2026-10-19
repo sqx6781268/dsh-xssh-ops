@@ -28,7 +28,7 @@ function dirnameOf(path) {
   return path.slice(0, idx);
 }
 
-export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFile = null, pendingFileName = null, onPendingConsumed = null, followPath = null }) {
+export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFile = null, pendingFile = null, onPendingConsumed = null, followPath = null }) {
   const [cwd, setCwd] = useState("/");
   const [entries, setEntries] = useState(null);
   const [error, setError] = useState(null);
@@ -75,6 +75,8 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   // Mirror of cwd for post-operation refreshes: a mutation that finishes after
   // the user navigated elsewhere must refresh the NEW directory, not snap back.
   const cwdRef = React.useRef("/");
+  // 终端点文件名时要在「load 之后」用最新目录内容查找，所以额外保留一份 entries 快照。
+  const entriesRef = React.useRef(null);
 
   // Favorites are stored per server: the runtime connection id changes every
   // session, so resolve the stable host/port/username key once here.
@@ -103,7 +105,9 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     try {
       const value = await api.sftpList(connectionId, path);
       if (seq !== loadSeq.current) return;
-      setEntries(Array.isArray(value?.entries) ? value.entries : []);
+      const items = Array.isArray(value?.entries) ? value.entries : [];
+      entriesRef.current = items;
+      setEntries(items);
       setCwd(value?.path || path);
       cwdRef.current = value?.path || path;
     } catch (err) {
@@ -638,20 +642,27 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     void load(followPath);
   }, [followPath]);
 
-  // 终端里点击文件名后：在当前目录找它，图片/Office 走预览，其余走编辑器页签。
+  // 终端里点击文件名后：先切到终端当时的目录，再在目录里找它；
+  // 图片/Office 走预览，其余走编辑器页签（用户 2026-10-20）。
   useEffect(() => {
-    if (!pendingFileName || entries === null) return;
-    const entry = entries.find((item) => item.name === pendingFileName);
+    if (!pendingFile) return;
+    const { name, cwd: targetCwd } = pendingFile;
     onPendingConsumed?.();
-    if (!entry) {
-      setError(t(`当前目录（${cwd}）里没有 ${pendingFileName}`));
-      return;
-    }
-    if (entry.isDirectory) openEntry(entry);
-    else if (isImageName(entry.name)) void openPreview(entry);
-    else if (isFileViewerName(entry.name)) void openViewer(entry);
-    else void openEditor(entry);
-  }, [pendingFileName]);
+    void (async () => {
+      if (targetCwd && targetCwd !== cwdRef.current) {
+        await load(targetCwd);
+      }
+      const entry = (entriesRef.current ?? []).find((item) => item.name === name);
+      if (!entry) {
+        setError(t(`当前目录（${cwdRef.current}）里没有 ${name}`));
+        return;
+      }
+      if (entry.isDirectory) openEntry(entry);
+      else if (isImageName(entry.name)) void openPreview(entry);
+      else if (isFileViewerName(entry.name)) void openViewer(entry);
+      else void openEditor(entry);
+    })();
+  }, [pendingFile]);
 
   const isRoot = cwd === "/";
   const goParent = () => { if (!isRoot) load(dirnameOf(cwd)); };

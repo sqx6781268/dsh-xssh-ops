@@ -298,6 +298,8 @@ export function registerSshSessionTools(ctx, service) {
       from_line: { type: "integer", description: "lines mode: first line of the range (1-based); use with to_line." },
       to_line: { type: "integer", description: "lines mode: last line of the range (inclusive)." },
       tail_lines: { type: "integer", description: `lines mode: newest N lines when no range is given; defaults to ${DEFAULT_TAIL_LINES}.` },
+      command_id: { type: "string", description: "Read one command's output by the id returned from xssh_write (or a ledger id). The host waits for the command to close (exit/idle) and then returns its line range — no manual sleep needed." },
+      wait_ms: { type: "integer", description: "command_id mode: how long to wait for the command to close, defaults to 15000, max 60000." },
       max_bytes: { type: "integer", description: `lines mode: response size cap; defaults to ${DEFAULT_MAX_BYTES}, hard limit ${MAX_READ_BYTES}.` }
     },
     output: {
@@ -318,10 +320,20 @@ export function registerSshSessionTools(ctx, service) {
           nextLine: { type: "number" },
           truncated: { type: "boolean" },
           evicted: { type: "boolean" },
-          redacted: { type: "boolean" }
+          redacted: { type: "boolean" },
+          commandId: { type: "string" },
+          status: { type: "string" },
+          exitCode: { type: "integer" },
+          closedBy: { type: "string" },
+          timedOut: { type: "boolean" }
         }
       },
       render(args, value) {
+        if (value.view === "command") {
+          const head = `${value.commandId} · ${value.status}${value.exitCode === null || value.exitCode === undefined ? "" : ` (exit ${value.exitCode})`}${value.timedOut ? t(" · 等待超时（命令可能还在跑）") : ""}${value.closedBy ? ` · closedBy=${value.closedBy}` : ""}`;
+          const body = value.text === "" ? t("（无输出）") : value.text;
+          return [{ type: "text", text: `${head}\n${body}` }];
+        }
         const mode = args.mode === "lines" ? "lines" : "full";
         if (mode === "full") {
           const body = value.hasSession === false
@@ -343,6 +355,16 @@ export function registerSshSessionTools(ctx, service) {
       }
     },
     async execute(args) {
+      if (typeof args.command_id === "string" && args.command_id !== "") {
+        const output = await service.readCommandOutput({
+          commandId: args.command_id,
+          waitMs: args.wait_ms,
+          maxBytes: clampBytes(args.max_bytes)
+        });
+        if (!output.ok) throw new Error(`xssh_read failed: ${output.error.message}`);
+        const safe = redactForModel(output.value.text ?? "");
+        return { ...output.value, view: "command", text: safe.text, redacted: safe.redacted };
+      }
       const mode = args.mode === "lines" ? "lines" : "full";
       if (mode === "full") {
         const result = service.readCurrentConnection({ connectionId: args.connection_id });
@@ -401,11 +423,15 @@ export function registerSshSessionTools(ctx, service) {
         type: "object",
         additionalProperties: false,
         properties: {
-          written: { type: "integer", required: true }
+          written: { type: "integer", required: true },
+          commandId: { type: "string" }
         }
       },
       render(args, value) {
-        return [{ type: "text", text: `Sent ${value.written} bytes to the terminal session.` }];
+        const note = value.commandId
+          ? ` Ledger id: ${value.commandId} — call xssh_read with command_id to wait for it and get its output.`
+          : "";
+        return [{ type: "text", text: `Sent ${value.written} bytes to the terminal session.${note}` }];
       }
     },
     async execute(args) {
