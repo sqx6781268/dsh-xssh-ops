@@ -36,7 +36,10 @@ const IRREVERSIBLE_BLOCKS = [
   [/\b(?:mkfs(?:\.|\b)|dd\b|wipefs\b|fdisk\b|parted\b|sgdisk\b)\b/i, "格式化或改写磁盘"],
   [/\b(?:docker\s+(?:system\s+prune|container\s+prune|image\s+prune|volume\s+prune)|docker\s+(?:rm|rmi|volume\s+rm))\b/i, "删除容器、镜像或卷"],
   [/\b(?:kubectl\s+delete|helm\s+uninstall|terraform\s+destroy)\b/i, "销毁已部署资源"],
-  [/\bgit\s+(?:reset\s+--hard|clean\s+-[a-z]*f)\b/i, "不可恢复地清理代码工作区"],
+  // git clean 的旗标可组合（-fd/-df/-fdx 都含 f），旧正则 `-[a-z]*f\b` 在 f 后面
+  // 紧跟字母时 \b 不成立 —— 最常用的 `git clean -fd` 与 `--force` 从未被拦截
+  // （上游 0.3.22 同类漏洞，本地实测确认）。改为「任意含 f 的短旗组」+ --force。
+  [/\bgit\s+(?:reset\s+--hard|clean\s+(?:-[a-z]*f[a-z]*|--force))\b/i, "不可恢复地清理代码工作区"],
   [/\b(?:reboot|shutdown|poweroff|halt)\b/i, "重启或关闭服务器"]
 ];
 // i18n-identifier-end

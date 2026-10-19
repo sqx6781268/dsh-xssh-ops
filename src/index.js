@@ -5117,13 +5117,26 @@ export default class SshOpsService extends TypertRemoteService {
     const net = await import("node:net");
     try {
       const server = net.createServer((socket) => {
-        conn.client.forwardOut(bindAddr, bindPort, request.remoteHost, request.remotePort, (error, stream) => {
-          if (error) {
-            socket.destroy();
-            return;
-          }
-          socket.pipe(stream).pipe(socket);
-        });
+        // ssh2 在传输断开时**同步 throw** "Not connected"（不走 callback），而断线后
+        // 隧道 listener 仍在监听：任何迟到接入（浏览器刷新、端口扫描）都会把异常
+        // 抛进宿主进程。上游 0.3.21 即为这处导致的闪退，必须在这里兜住。
+        try {
+          conn.client.forwardOut(bindAddr, bindPort, request.remoteHost, request.remotePort, (error, stream) => {
+            if (error || !stream) {
+              socket.destroy();
+              return;
+            }
+            // 双向 'error' 互相拆链：本地 RST（ECONNRESET）在裸 socket 上没有监听
+            // 会直接 throw；close 时也销毁对端，避免半开连接累积。
+            socket.on("error", () => stream.destroy());
+            stream.on("error", () => socket.destroy());
+            socket.once("close", () => stream.destroy());
+            stream.once("close", () => socket.destroy());
+            socket.pipe(stream).pipe(socket);
+          });
+        } catch {
+          socket.destroy();
+        }
       });
       await new Promise((resolve, reject) => {
         server.once("error", reject);
@@ -5245,7 +5258,15 @@ export default class SshOpsService extends TypertRemoteService {
       const server = net.createServer((socket) => {
         record.connections += 1;
         attachSocks5(socket, {
-          forwardOut: (host, port, callback) => conn.client.forwardOut("127.0.0.1", 0, host, port, callback),
+          forwardOut: (host, port, callback) => {
+            // 传输断开时 ssh2 同步 throw，这里转成回调错误，让 SOCKS5 回失败应答
+            // 而不是把异常抛给宿主（上游 0.3.21 同类缺陷）。
+            try {
+              conn.client.forwardOut("127.0.0.1", 0, host, port, callback);
+            } catch (error) {
+              callback(error);
+            }
+          },
           onClose: () => { record.connections = Math.max(0, record.connections - 1); }
         });
       });

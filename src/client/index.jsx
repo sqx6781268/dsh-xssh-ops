@@ -46,13 +46,17 @@ export async function apply(ctx) {
     if (typeof dispose === "function") disposers.push(dispose);
     return dispose;
   };
+  // 整段注册序列纳入同一守卫（上游 #37）：任何一步失败都逆序回滚已登记物，并重抛
+  // 原始错误。只守 $mount 时，后续步骤抛错会留下已注册的 locale 字典；宿主对 FAILED
+  // entry 的重试是「不 teardown 直接再 apply」，第二次撞「重复注册」把真实错误盖住。
+  const unwind = async () => {
+    for (const d of disposers.reverse()) {
+      try { await d(); } catch { /* 单个 disposer 失败不阻断其余，也不掩盖主错误 */ }
+    }
+  };
   try {
     const dispose = await ctx.remote.$mount(TYPERT_REMOTE);
     own(dispose);
-  } catch (error) {
-    for (const d of disposers.reverse()) await d();
-    throw error;
-  }
 
   const api = createSshApi(ctx);
 
@@ -136,9 +140,12 @@ export async function apply(ctx) {
     )
   ));
 
-  return async () => {
-    for (const d of disposers.reverse()) await d();
-  };
+  } catch (error) {
+    await unwind();
+    throw error;
+  }
+
+  return async () => { await unwind(); };
 }
 
 /** Official Sidebar registrations: both stages live under one disposable scope. */

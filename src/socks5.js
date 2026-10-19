@@ -121,15 +121,21 @@ export function attachSocks5(socket, { forwardOut, onClose }) {
         if (request.ok === false) { fail(SOCKS_REPLY.ADDRESS_NOT_SUPPORTED); return; }
         if (request.unsupportedCommand) { fail(SOCKS_REPLY.COMMAND_NOT_SUPPORTED); return; }
         state = "open";
-        forwardOut(request.host, request.port, (error, stream) => {
-          if (error || !stream) { fail(replyCodeForError(error)); return; }
-          socket.write(replyBytes(SOCKS_REPLY.SUCCEEDED));
-          stream.on("error", () => socket.destroy());
-          socket.on("error", () => stream.destroy());
-          socket.on("close", () => { stream.destroy(); closed(); });
-          socket.pipe(stream);
-          stream.pipe(socket);
-        });
+        try {
+          forwardOut(request.host, request.port, (error, stream) => {
+            if (error || !stream) { fail(replyCodeForError(error)); return; }
+            socket.write(replyBytes(SOCKS_REPLY.SUCCEEDED));
+            stream.on("error", () => socket.destroy());
+            socket.on("error", () => stream.destroy());
+            socket.on("close", () => { stream.destroy(); closed(); });
+            stream.once("close", () => socket.destroy());
+            socket.pipe(stream);
+            stream.pipe(socket);
+          });
+        } catch (error) {
+          // forwardOut 实现若同步 throw（ssh2 断线），按失败应答收口。
+          fail(replyCodeForError(error));
+        }
         return;
       }
       // Connected: everything after the request is payload handled by pipe().

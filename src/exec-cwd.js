@@ -25,12 +25,20 @@ __dsh_find_shell() {
     __dsh_seen=$((__dsh_seen + 1))
     __dsh_stat=$(cat "$__dsh_p/stat" 2>/dev/null) || continue
     __dsh_stat=\${__dsh_stat##*) }
-    set -- $__dsh_stat
-    [ "$#" -ge 6 ] && [ "$3" = "$6" ] && [ "$5" != 0 ] || {
+    # Split fields with IFS: zsh disables SH_WORD_SPLIT by default, so the
+    # unquoted "set -- " expansion yields ONE field ($#=1) and every
+    # candidate falls into the busy branch - the root cause of exec failing with
+    # 125 on zsh-login-shell hosts since 0.3.x (same fix as upstream 0.4.0).
+    # read does not touch positional parameters.
+    __dsh_pgrp= __dsh_tty_nr= __dsh_tpgid=
+    read -r __dsh_state __dsh_ppid __dsh_pgrp __dsh_session __dsh_tty_nr __dsh_tpgid <<EOF
+$__dsh_stat
+EOF
+    [ -n "$__dsh_tpgid" ] && [ "$__dsh_pgrp" = "$__dsh_tpgid" ] && [ "$__dsh_tty_nr" != 0 ] || {
       __dsh_busy=$((__dsh_busy + 1))
       # Status 3 names up to three rejected candidates, so a "terminal busy"
       # report can be told apart from a resolver-side mismatch in the field.
-      [ "$__dsh_busy" -le 3 ] && __dsh_detail="$__dsh_detail $__dsh_c($__dsh_n pgrp=$3 tpgid=$6)"
+      [ "$__dsh_busy" -le 3 ] && __dsh_detail="$__dsh_detail $__dsh_c($__dsh_n pgrp=$__dsh_pgrp tpgid=$__dsh_tpgid)"
       continue
     }
     # Foreground is necessary but not sufficient: bash -c/script jobs are

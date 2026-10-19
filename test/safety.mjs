@@ -21,7 +21,11 @@ const safeCommands = [
   "xargs echo done",
   "python3 --version",
   "node -e \"console.log('ok')\"",
-  "perl -e 'print 1'"
+  "perl -e 'print 1'",
+  // git clean 的干跑/交互模式不动文件，不能误拦（用户 2026-10-20）。
+  "git clean -n",
+  "git clean -i",
+  "git status"
 ];
 
 const blockedCommands = [
@@ -42,7 +46,13 @@ const blockedCommands = [
   "docker system prune -af",
   "kubectl delete namespace production",
   "terraform destroy",
-  "git reset --hard"
+  "git reset --hard",
+  // 旗标组合与 --force 都必须拦住（上游 0.3.22 的漏洞：-fd 从未命中）。
+  "git clean -f",
+  "git clean -fd",
+  "git clean -df",
+  "git clean -fdx",
+  "git clean --force"
 ];
 
 for (const command of safeCommands) {
