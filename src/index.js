@@ -372,6 +372,8 @@ const settingsRecordSchema = z.object({
   terminalFileLinks: z.boolean().optional(),
   // 文件页签跟随终端路径（用户 2026-10-19），默认开；关掉时终端文件名识别也失效。
   filesFollowTerminal: z.boolean().optional(),
+  // 最近一次保存服务器用的用户名（用户 2026-10-20）：新建表单默认预填它。
+  lastUsername: z.string().optional(),
   updatedAt: z.string().optional()
 });
 
@@ -616,7 +618,8 @@ export function loadSettingsRecord(record = {}) {
     sessionLogMaxAgeDays: Number.isSafeInteger(record.sessionLogMaxAgeDays) ? record.sessionLogMaxAgeDays : OUTPUT_LOG_DEFAULTS.sessionLogMaxAgeDays,
     broadcastHintDismissed: record.broadcastHintDismissed === true,
     terminalFileLinks: record.terminalFileLinks !== false,
-    filesFollowTerminal: record.filesFollowTerminal !== false
+    filesFollowTerminal: record.filesFollowTerminal !== false,
+    lastUsername: typeof record.lastUsername === "string" ? record.lastUsername : ""
   };
 }
 
@@ -946,7 +949,8 @@ export default class SshOpsService extends TypertRemoteService {
         sessionLogMaxAgeDays: loaded.sessionLogMaxAgeDays,
         broadcastHintDismissed: loaded.broadcastHintDismissed,
         terminalFileLinks: loaded.terminalFileLinks,
-        filesFollowTerminal: loaded.filesFollowTerminal
+        filesFollowTerminal: loaded.filesFollowTerminal,
+        lastUsername: loaded.lastUsername
       };
       // Materialize the default: the flag is an operator-editable field of
       // xssh_ops_settings.json, so a record that predates it must gain the
@@ -1961,6 +1965,15 @@ export default class SshOpsService extends TypertRemoteService {
         updatedAt: now
       };
       await table.put(profileId, record);
+      // 记住最近一次保存服务器用的用户名（用户 2026-10-20）：新建表单预填它，
+      // best-effort —— 设置表异常不能阻断资源保存。
+      if (typeof record.username === "string" && record.username !== "") {
+        try {
+          const previousSettings = this.settingsTable.get(SETTINGS_ROW_ID) ?? {};
+          await this.settingsTable.put(SETTINGS_ROW_ID, { ...previousSettings, lastUsername: record.username, updatedAt: new Date().toISOString() });
+          this.settings = { ...(this.settings ?? {}), lastUsername: record.username };
+        } catch { /* 记住用户名是 best-effort */ }
+      }
       return {
         ok: true,
         value: {
@@ -2292,6 +2305,9 @@ export default class SshOpsService extends TypertRemoteService {
         return { ok: false, error: fail("keepalive-invalid", `${key} must be an integer in [${min}, ${max}]`) };
       }
       patch[key] = numeric;
+    }
+    if (typeof request.lastUsername === "string") {
+      patch.lastUsername = request.lastUsername.slice(0, 128);
     }
     if (typeof request.idleStringText === "string") {
       if (request.idleStringText.length > 4096) {

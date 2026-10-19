@@ -169,6 +169,11 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
     api.keepAliveGet?.().then((result) => {
       const value = result?.value ?? result;
       if (alive && Array.isArray(value?.proxyLibrary)) setLibrary(value.proxyLibrary);
+      // 新建服务器预填上次用过的用户名（用户 2026-10-20）：只在新建表单、
+      // 且用户还没改过默认用户名时生效，不覆盖已输入的内容。
+      if (alive && !initial && typeof value?.lastUsername === "string" && value.lastUsername !== "") {
+        setForm((previous) => (previous.username === "root" || previous.username === "" ? { ...previous, username: value.lastUsername } : previous));
+      }
     }).catch(() => {});
     return () => { alive = false; };
   }, [api]);
