@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.3-blue)
+![version](https://img.shields.io/badge/version-0.1.4-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.3.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3
+tar -xzf dsh-xssh-ops-0.1.4.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.4
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.4.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -171,6 +171,17 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-20 · v0.1.4 —— 从上游 0.3.21–0.4.0 融合的安全与体验加固
+- **安全**：修复 `git clean -fd` / `--force` 从未命中 deny-list 的漏洞（此前只有 `-f`/`-df` 能拦）；`test/safety.mjs` 补拦截矩阵
+- **防崩溃**：隧道/SOCKS5 的 `forwardOut` 在传输断开时同步 throw（迟到接入会抛进宿主）——改 try/catch 并把错误转成回调/失败应答；socket 与 channel 双向加 error 拆链
+- **SOCKS5 三缺陷**：握手解析器在隧道打开后退役（转发流量不再无界累积内存）、握手窗口内管线化载荷先 flush 再 pipe（不再丢包）、close 只计一次连接数
+- **客户端稳定性**：`apply()` 整段注册纳入同一守卫，失败逆序回滚并重抛原始错误（此前 locale 残留导致宿主重试永久 FAILED）；隧道面板回调参数 `t` 遮蔽 i18n 的 `t()`（列表非空即崩）
+- **兼容性**：zsh 登录 shell 的机器上 `xssh_exec` 永久失败——`/proc/*/stat` 改用 `read -r` 拆字段（zsh 默认关闭 SH_WORD_SPLIT，`set --` 只会得到 1 个字段）
+- **工具**：`xssh_read` 默认 `mode: "new"` 增量读——只返回上次读取之后的新输出，`mode: "full"` 全量回看且不推进游标；capture 截断后游标自动失效并回落全量
+- **交互**：终端 `Ctrl + 滚轮`（触控板捏合同效）缩放字号 8–28，累积判步、所有池化终端同步、偏好持久化；会话日志图里 error 行红 / warning 行琥珀（`log-tone.js`，纯文本启发式）
+- **资源**：新建服务器表单预填「上次保存服务器用的用户名」（设置项 `lastUsername`，不覆盖已输入内容）
+- 说明：v0.1.4 只推送代码与 tag，**未生成离线包**
 
 ### 2026-10-20 · 命令执行统一为 write → read（v0.1.3）
 - `xssh_write` 回车提交的命令返回 `commandId`；`xssh_read` 新增 `command_id` 模式：等命令闭口后返回行区间输出（默认等 15s，上限放宽到 10 分钟）

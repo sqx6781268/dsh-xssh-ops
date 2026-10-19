@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4 - 2026-10-20
+
+- **安全：`git clean` 拦截漏洞**（上游 0.3.22 同类）：deny-list 正则尾部 `\b` 使 `-[a-z]*f` 在 `-fd`/`-df` 这类组合旗标上失效，最常用的 `git clean -fd` 与 `git clean --force` 自上线起从未被拦截。现在匹配「任意含 f 的短旗组」与 `--force`，干跑/交互模式（`-n`/`-i`）不误拦；`test/safety.mjs` 补拦截矩阵。
+- **稳定性：隧道与 SOCKS5 的崩溃路径**（上游 0.3.21）：`forwardOut` 在传输断开时是**同步 throw**（不走回调），断线后隧道 listener 仍在监听，迟到接入（浏览器刷新、端口扫描）会把异常抛进宿主；本地隧道与 SOCKS5 的 `forwardOut` 包装均加 try/catch，socket/channel 双向补 `error` 监听与 close 拆链。
+- **SOCKS5 三缺陷**（上游 0.3.22）：握手解析器在 CONNECT 成功后**立即退役**（此前转发流量仍在 buffer 里无界累积）；握手窗口内客户端管线化载荷先 flush 再 `pipe`（不再丢失）；`closed()` 只在 socket close 触发一次（此前计数被减两次）。
+- **客户端 apply 重入**（上游 #37）：注册序列此前只有 `$mount` 受守卫，后续任一步失败都会留下已注册的 locale 字典，宿主对 FAILED entry 的重试（不 teardown 直接再 apply）撞「重复注册」并把真实错误盖住。现在整段纳入同一守卫，失败**逆序回滚全部已登记物**并重抛原始错误；unwind 自身容错（单个 disposer 失败不阻断其余）。
+- **zsh 登录 shell 的 `xssh_exec` 永久失败**（上游 0.4.0 / PR #39）：`/proc/*/stat` 字段拆分用未加引号的 `set --` 展开，zsh 默认关闭 SH_WORD_SPLIT 时只得到 1 个字段，每个候选都落进 busy → `interactive shell is busy or non-interactive`、exec 永久 125。改用 `read -r` 按 IFS 拆字段（不占位置参数），短/畸形 stat 行仍 fail-closed。
+- **`xssh_read` 增量读**（上游 0.4.0 / 用户 2026-10-20）：默认 `mode="new"` 只返回该会话上次读取之后的新输出（会话级游标），首读全量；`mode="full"` 保留整段 capture 且不推进游标；无新输出渲染 `(no new output since the previous read)`。capture 是丢头保尾的 tail-cap，一旦发生截断游标永久失效并回落全量（`cursorBroken`），避免读到错位内容。新增 `test/ssh-read-incremental.mjs`（首读/增量/full 不推进游标/截断 latch/未知连接）。
+- **终端 `Ctrl + 滚轮` / 触控板捏合缩放**（上游 0.4.0）：捕获阶段拦截 `wheel`（捏合即带 `ctrlKey` 的 wheel），累积判步（±50 才跳一档）避免捏合连发跳级；字号 8–28，`applyFont` 同步全部池化终端、refit 并持久化偏好。
+- **会话日志 warning/error 行高亮**（上游 0.4.0）：新增 `src/client/log-tone.js` 纯文本分类（error/fatal/failed/traceback/exception/errno → 红；warn/warning/deprecated → 琥珀），日志查看器逐行渲染，超 3000 行退回纯文本；errno 正则**区分大小写**（否则 `expired` 会被误判）。`test/log-tone.mjs` 覆盖分类矩阵。
+- **新建服务器记住上次用户名**（上游 0.4.0）：设置表新增 `lastUsername`（`profileSave` 保存成功时 best-effort 记录）；资源编辑器新建表单仅在该字段仍为默认 `root`/空时预填，不覆盖已输入内容。
+- **说明**：v0.1.4 只推送代码与 tag，**不生成离线安装包**（`npm run pack:release` 留到需要时再跑）。
+
 ## 0.1.3 - 2026-10-19
 
 - **新增：`xssh_resource` —— AI 可添加/保存 SSH 资源的工具入口（第 14 个入口工具）**：此前 `profileSave` 一族 RPC 只暴露给 Web UI 客户端，AI 没有任何添加/修改已保存资源的通道——现场排障时（如「外网应用」资源漏配 SOCKS5 代理）AI 只能直连硬闯，不能替操作员把资源修好保存。新工具 `src/tools/resource.js` 提供 `list` / `save` 两个 op：`list` 列出资源坐标、认证方式、凭据/代理配置状态与连接状态（绝不回显任何秘密）；`save` 新建（不传 `profile_id`）或更新（传 `profile_id`）资源，支持坐标、host-key 模式、分组与 SOCKS5 代理。**边界（有意为之）**：① 不提供 delete——`profileDelete` 会连带 unset 全部凭据且不可逆，删除属操作员决策面；② 密码/私钥/passphrase/代理密码经 `credentials.set` 写入凭据存储，与 UI 保存路径（`SshResources.jsx credentialWrite`）使用完全相同的 ref 约定（`DSH_SSH_OPS_<stem>_…`），**绝不**进 `profileSave` 请求体或资源记录（服务端 schema 本就如此设计）；③ 更新时留空凭据 = 保留原值，显式传值 = 覆盖；④ 凭据写失败时自动回滚半保存的资源记录并如实报错，不假装成功。i18n 七条新文案入双语词典（提取器零漂移）；`test/resource-tool.mjs` 新增七组用例（注册、列表无秘密、新建写凭据且 ref 与 UI 同名、更新留空保留/传值覆盖、缺参报错、未知 op 报错），`tool-namespace` / `coexistence` / `host-runtime` 工具计数 13→14 同步。
