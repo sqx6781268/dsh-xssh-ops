@@ -681,6 +681,11 @@ ${menuSelection}`;
     const sizeByWidth = `${scale}% auto`;
     if (image.stretch === true) return { backgroundSize: `${scale}% ${scale}%`, backgroundRepeat: "no-repeat", backgroundPosition: `${x}% 50%` };
     switch (image.position) {
+      // 「居中缩放」= contain（整图按比例放进终端，四周留空）；
+      // 「居中裁剪」= cover（按原图与终端大小裁掉多余部分）。旧值 center 按缩放处理。
+      case "center":
+      case "center-zoom": return { backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "50% 50%" };
+      case "center-crop": return { backgroundSize: "cover", backgroundRepeat: "no-repeat", backgroundPosition: "50% 50%" };
       case "tile": return { backgroundSize: sizeByWidth, backgroundRepeat: "repeat", backgroundPosition: `${x}% 0%` };
       case "top-left": return { backgroundSize: sizeByWidth, backgroundRepeat: "no-repeat", backgroundPosition: "0% 0%" };
       case "top-center": return { backgroundSize: sizeByWidth, backgroundRepeat: "no-repeat", backgroundPosition: "50% 0%" };

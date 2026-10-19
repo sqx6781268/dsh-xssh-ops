@@ -478,7 +478,8 @@ export function KeepAliveSettings({ api, connectionId = undefined }) {
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
               <select style={{ ...styles.input, width: 96 }} value={layer.position} onChange={(event) => patchLayer(index, { position: event.target.value })}>
-                <option value="center">{t("居中")}</option>
+                <option value="center-zoom">{t("居中缩放")}</option>
+                <option value="center-crop">{t("居中裁剪")}</option>
                 <option value="tile">{t("平铺")}</option>
                 <option value="top-left">{t("左上")}</option>
                 <option value="top-center">{t("上中")}</option>

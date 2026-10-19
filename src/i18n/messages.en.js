@@ -1152,4 +1152,6 @@ export const en = {
   "更新": "updated",
   "已保存的资源（${lines.length}）：": "Saved resources (${lines.length}):",
   " · 等待超时（命令可能还在跑）": " · wait timed out (command may still be running)",
+  "居中缩放": "Center (fit)",
+  "居中裁剪": "Center (crop)",
 };

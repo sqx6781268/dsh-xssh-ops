@@ -449,7 +449,8 @@ export const BACKGROUND_DEFAULTS = {
   // 数组顺序即渲染顺序（后面的层在上面）；旧版单图在归一化时迁移成一层。
   images: []
 };
-export const BACKGROUND_POSITIONS = ["center", "tile", "top-left", "top-center", "top-right", "left-center", "right-center", "bottom-left", "bottom-center", "bottom-right"];
+export const BACKGROUND_POSITIONS = ["center", "center-zoom", "center-crop", "tile", "top-left", "top-center",
+  "top-right", "left-center", "right-center", "bottom-left", "bottom-center", "bottom-right"];
 
 /** 背景图配置归一化：dataURL 长度受限（防设置表被撑爆），数值夹紧。 */
 export function normalizeTerminalBackground(value) {
