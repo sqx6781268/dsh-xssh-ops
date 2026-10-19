@@ -325,6 +325,11 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     entryRef.current = entry;
     const term = entry.term;
     const fit = entry.fit;
+    // 排障钩子（用户 2026-10-20）：localStorage xssh-ops:debug=1 时暴露当前终端实例，
+    // 便于在 Console 里分段测量字号重排（set options / resize / refresh）。
+    try {
+      if (globalThis.localStorage?.getItem("xssh-ops:debug") === "1") globalThis.__xsshTerm = term;
+    } catch { /* 忽略 */ }
     // 终端背景图（用户 2026-10-18）：开启时画布背景透明，让容器上的背景层透出来。
     // 应用字体设置（用户 2026-10-19）：池终端每次挂载都按当前设置校正。
     const mountedFont = readStoredTerminalFont() ?? font;
