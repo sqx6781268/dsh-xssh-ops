@@ -169,6 +169,22 @@ const TERMINAL_FONT_CHOICES = [
   { label: "monospace", family: "monospace" }
 ];
 const DEFAULT_TERMINAL_FONT = { family: TERMINAL_FONT_CHOICES[0].family, size: 13 };
+// 字号/字体本地缓存（用户 2026-10-20）：调整只写这里并作用于终端，不再更新 SshPanel
+// 的 state —— 否则每次调整都会重渲染整个面板（含 Monaco / 文件 / 日志页签），实测
+// 单次约 3 秒。面板重新挂载时从这里恢复。
+const TERMINAL_FONT_STORAGE_KEY = "xssh-ops:terminal:font";
+function readStoredTerminalFont() {
+  try {
+    const raw = globalThis.localStorage?.getItem(TERMINAL_FONT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const family = typeof parsed.family === "string" && parsed.family !== "" ? parsed.family : DEFAULT_TERMINAL_FONT.family;
+    const size = Number(parsed.size);
+    if (!Number.isFinite(size) || size < 8 || size > 28) return null;
+    return { family, size };
+  } catch { return null; }
+}
 
 let stopTerminalThemeWatcher = null;
 
@@ -219,6 +235,9 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
   const applyFont = (next) => {
     const value = { family: next.family ?? DEFAULT_TERMINAL_FONT.family, size: next.size ?? DEFAULT_TERMINAL_FONT.size };
     fontValueRef.current = value;
+    // 本地缓存：字号变化不经过 React state（见 changeTerminalFont 的说明），
+    // 面板重新挂载时靠它恢复。
+    try { globalThis.localStorage?.setItem(TERMINAL_FONT_STORAGE_KEY, JSON.stringify(value)); } catch { /* 忽略 */ }
     // 只即时更新**当前可见**终端：其它池化终端在下一次挂载时按 font 值应用（mount 里
     // 已有这段赋值）。此前每次调整都对池里所有终端逐台重排（xterm 字号变化会重新测量
     // 字符并重绘），滚轮/连点 +/- 时的卡顿主要来自这里。
@@ -287,9 +306,10 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     const fit = entry.fit;
     // 终端背景图（用户 2026-10-18）：开启时画布背景透明，让容器上的背景层透出来。
     // 应用字体设置（用户 2026-10-19）：池终端每次挂载都按当前设置校正。
+    const mountedFont = readStoredTerminalFont() ?? font;
     try {
-      term.options.fontFamily = font?.family ?? DEFAULT_TERMINAL_FONT.family;
-      term.options.fontSize = Number(font?.size ?? DEFAULT_TERMINAL_FONT.size);
+      term.options.fontFamily = mountedFont?.family ?? DEFAULT_TERMINAL_FONT.family;
+      term.options.fontSize = Number(mountedFont?.size ?? DEFAULT_TERMINAL_FONT.size);
     } catch { /* 忽略 */ }
     const bgEnabled = background?.enabled === true
       && typeof background.dataUrl === "string" && background.dataUrl !== "";
@@ -632,9 +652,10 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
   useEffect(() => {
     const term = entryRef.current?.term;
     if (term === undefined || term === null) return;
+    const value = readStoredTerminalFont() ?? font;
     try {
-      term.options.fontFamily = font?.family ?? DEFAULT_TERMINAL_FONT.family;
-      term.options.fontSize = Number(font?.size ?? DEFAULT_TERMINAL_FONT.size);
+      term.options.fontFamily = value?.family ?? DEFAULT_TERMINAL_FONT.family;
+      term.options.fontSize = Number(value?.size ?? DEFAULT_TERMINAL_FONT.size);
     } catch { /* 忽略 */ }
   }, [font]);
 
@@ -1439,7 +1460,8 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
   // 字体改动立即生效、防抖保存（用户 2026-10-19）：字号连点不必每次都写库。
   const fontSaveTimerRef = useRef(null);
   const changeTerminalFont = useCallback((next) => {
-    setTerminalFont(next);
+    // 不 setTerminalFont(next)：字号调整只作用于终端 + 本地缓存 + 防抖保存设置。
+    // 更新这个 state 会让整个面板（含 Monaco/文件/日志）重渲染，实测约 3 秒。
     if (fontSaveTimerRef.current !== null) clearTimeout(fontSaveTimerRef.current);
     fontSaveTimerRef.current = setTimeout(() => {
       fontSaveTimerRef.current = null;
