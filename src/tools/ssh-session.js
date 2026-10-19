@@ -323,6 +323,8 @@ export function registerSshSessionTools(ctx, service) {
           redacted: { type: "boolean" },
           commandId: { type: "string" },
           status: { type: "string" },
+          startLine: { type: "number" },
+          endLine: { type: "number" },
           exitCode: { type: "integer" },
           closedBy: { type: "string" },
           timedOut: { type: "boolean" }
@@ -363,7 +365,13 @@ export function registerSshSessionTools(ctx, service) {
         });
         if (!output.ok) throw new Error(`xssh_read failed: ${output.error.message}`);
         const safe = redactForModel(output.value.text ?? "");
-        return { ...output.value, view: "command", text: safe.text, redacted: safe.redacted };
+        const value = { ...output.value, view: "command", text: safe.text, redacted: safe.redacted };
+        // 输出 schema 是 additionalProperties:false 且类型严格：未知/无值字段必须省略，
+        // 不能留 null（exitCode/closedBy/行号在「未闭口」或「无行日志」时就是 null）。
+        for (const key of ["exitCode", "closedBy", "startLine", "endLine", "firstLine", "lastLine", "timedOut"]) {
+          if (value[key] === null || value[key] === undefined) delete value[key];
+        }
+        return value;
       }
       const mode = args.mode === "lines" ? "lines" : "full";
       if (mode === "full") {
