@@ -129,7 +129,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 | --- | --- |
 | `xssh_connect` | 连接：`target` 选已保存服务器，或 `host`+`username`+`auth` 直连；`proxy_probe` 只探测 SOCKS5 |
 | `xssh_connection` | `op: list \| disconnect` |
-| `xssh_exec` | 独立非交互通道：执行一条命令并返回 stdout/stderr/cwd/退出码（终端里可见的命令请走下面的 write → read） |
+| `xssh_exec` | 独立非交互通道：执行一条命令并返回 stdout/stderr/cwd/退出码；命令同样记入台账（`xssh_command` 可回查）。终端里可见的命令请走下面的 write → read |
 | `xssh_read` | `mode: full \| lines`，或给 `command_id`（等这条命令闭口后返回它的行区间输出；默认等 15s，上限 10 分钟） |
 | `xssh_write` | 向终端写入（默认带回车）；回车提交的命令返回 `commandId`，随后用 `xssh_read({command_id})` 等结果 |
 | `xssh_command` | `op: list \| output`（命令台账与单条命令输出） |
@@ -158,7 +158,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 | `xssh_exec` | 约 **0.8s** | 独立 SSH exec 通道，一次往返直接拿输出；终端可见性弱（只镜像一段回显） |
 | `xssh_write` → `xssh_read(command_id)` | 约 **1.6s** | 写入 + 等 idle 闭口（1500ms）+ 读取；命令在终端里可见、可回查台账 |
 
-差值固定约 0.8s，来自「输出静默 1.5s 才判定命令结束」：慢命令（编译、`apt`、长脚本）两者都要等命令本身跑完，差距就只剩这 0.8s；如果远端启用了 shell 集成（OSC 133），闭口是即时的，write → read 可以接近 exec 的速度。需要 `tail -f`、Vim 这类持续交互时，用 `xssh_write` 继续输入、按需 `xssh_read` 取当前输出即可。
+两条路径都会记入命令台账（`xssh_command op=list` / `op=output` 都能回查），区别只在耗时与终端可见性。差值固定约 0.8s，来自「输出静默 1.5s 才判定命令结束」：慢命令（编译、`apt`、长脚本）两者都要等命令本身跑完，差距就只剩这 0.8s；如果远端启用了 shell 集成（OSC 133），闭口是即时的，write → read 可以接近 exec 的速度。需要 `tail -f`、Vim 这类持续交互时，用 `xssh_write` 继续输入、按需 `xssh_read` 取当前输出即可。
 
 
 ## 项目定位
