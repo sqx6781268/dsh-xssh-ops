@@ -5,6 +5,7 @@
  */
 import * as React from "react";
 import { readableLine, toReadableText } from "../terminal-text.js";
+import { logLineTone } from "./log-tone.js";
 import { t } from "../i18n/core.js";
 const { useEffect, useState, useRef } = React;
 
@@ -29,6 +30,8 @@ export function SshLogs({ api }) {
   const [enabled, setEnabled] = useState(true);
   const [selected, setSelected] = useState(null);
   const [content, setContent] = useState("");
+  // 按行渲染以做 warning/error 高亮（见下方 viewer）。
+  const logLines = content.split("\n");
   // 列表宽度可拖动（用户 2026-10-19）：在列表与内容之间拖分隔条。
   const [listWidth, setListWidth] = useState(210);
   const [nextOffset, setNextOffset] = useState(0);
@@ -350,7 +353,23 @@ export function SshLogs({ api }) {
                   ))}
                 </div>
               )}
-              <pre style={styles.pre}>{content}{content === "" ? t("（空）") : ""}</pre>
+              {/* 会话日志 warning/error 行高亮（上游 0.4.0）：纯文本启发式，落点在
+                  已剥 ANSI 的整段文本上，不与远端程序自带的颜色叠加。超大日志
+                  （>3000 行）退回纯文本渲染，避免一次创建过多节点。 */}
+              <pre style={styles.pre}>
+                {content === ""
+                  ? t("（空）")
+                  : logLines.length > 3000
+                    ? content
+                    : logLines.map((line, index) => {
+                      const tone = logLineTone(line);
+                      return (
+                        <span key={index} style={tone === "error" ? styles.logError : tone === "warn" ? styles.logWarn : undefined}>
+                          {line}{index < logLines.length - 1 ? "\n" : ""}
+                        </span>
+                      );
+                    })}
+              </pre>
               <div style={styles.viewerFoot}>
                 <span style={styles.hint}>{formatBytes(nextOffset)} / {formatBytes(size)}{eof ? t(" · 已到末尾") : ""}</span>
                 {!eof && (
@@ -426,5 +445,8 @@ const styles = {
     color: "var(--dsw-alias-label-primary, #d7dbe2)", fontSize: 11, lineHeight: 1.45,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all"
   },
-  viewerFoot: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flex: "none" }
+  viewerFoot: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flex: "none" },
+  // 日志行高亮（上游 0.4.0）：error 红、warning 琥珀。
+  logError: { color: "#ff6b6b" },
+  logWarn: { color: "#e3b341" }
 };
