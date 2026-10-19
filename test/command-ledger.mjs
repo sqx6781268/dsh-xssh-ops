@@ -64,6 +64,31 @@ function makeLedger(options = {}) {
   assert.equal(ledger.openRecords().length, 0);
 }
 
+// ── closeFromExec：exec 通道的确定性闭口（xssh_exec 留痕链路，2026-10-19） ──
+{
+  const { ledger, advance } = makeLedger();
+  const record = ledger.open({ text: "uptime", markLine: 200, source: "agent-tool", pressEnter: true });
+  assert.equal(record.source, "agent-tool", "source=agent-tool 是合法枚举值");
+  assert.equal(record.status, "running");
+  ledger.noteOutput({ lastLine: 204 });
+  advance(10);
+  const closed = ledger.closeFromExec({ endLine: 204, exitCode: 0 });
+  assert.equal(closed.closedBy, "exec");
+  assert.equal(closed.status, "done", "exec 闭口即 done，不等空闲判定");
+  assert.equal(closed.endLine, 204);
+  assert.equal(closed.exitCode, 0);
+  // 先到先定：闭口后 openId 已清空，再次闭口返回 null（与 closeFromShellIntegration 同约定）
+  const again = ledger.closeFromExec({ endLine: 999, exitCode: 1 });
+  assert.equal(again, null, "无未闭口记录时返回 null");
+  assert.equal(ledger.byId(record.commandId).endLine, 204, "原记录不被改写");
+  assert.equal(ledger.byId(record.commandId).exitCode, 0);
+  // 非正常退出码也能闭口
+  ledger.open({ text: "false", markLine: 300, source: "agent-tool" });
+  const failed = ledger.closeFromExec({ endLine: 301, exitCode: 1 });
+  assert.equal(failed.exitCode, 1);
+  assert.equal(failed.status, "done");
+}
+
 // ── 判据②：空闲静默，且阈值前不闭口 ────────────────────────────────────────
 {
   const { ledger, advance } = makeLedger();

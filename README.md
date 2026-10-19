@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.1-blue)
+![version](https://img.shields.io/badge/version-0.1.2-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.1.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.1
+tar -xzf dsh-xssh-ops-0.1.2.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.1.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。

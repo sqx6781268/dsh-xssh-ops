@@ -3807,13 +3807,29 @@ export default class SshOpsService extends TypertRemoteService {
     const warning = execEchoWarning(cwd);
     const display = normalizeTerminalEol(`${warning ? `${warning}\n` : ""}$ ${displayCommand}\n${stdout}${stderr.length > 0 ? stderr : ""}`)
       .replace(/(?:\r\n)+$/, "");
+        // 命令台账：xssh_exec 也必须留痕（用户 2026-10-19 报告的缺口）。此前这条链路只
+    // 把命令镜像到终端显示，从不调 ledger.open()，xssh_command 查不到。source=
+    // agent-tool（COMMAND_SOURCES 里早已定义但从未使用的枚举值）。顺序：先 open 记
+    // 命令行，再 appendSessionOutput 让输出落行日志，最后 closeFromExec 用 exec 自带
+    // 的 exitCode 确定性闭口 —— 不依赖空闲判定。
     for (const sessionId of conn.sessions) {
       const session = this.sessions.get(sessionId);
       if (session && session.exited === null) {
+        try {
+          const ledger = this.ledgerFor(session);
+          const record = ledger.open({ text: displayCommand, markLine: this.lineMark(session), source: "agent-tool", pressEnter: true });
+          if (trashRun) ledger.markOutcome(record.commandId, { status: "done" });
+        } catch { /* 台账是叠加层 */ }
         const prompt = session.lastPrompt ?? this.fallbackPrompt(conn);
         // exec() is a separate non-interactive SSH channel. It never makes
         // the PTY shell emit a prompt, so restore the last real prompt here.
         this.appendSessionOutput(session, `${display}\r\n${prompt}`, { capture: false, observePrompt: false });
+        try {
+          const ledger = session.commandLedger;
+          if (ledger !== undefined && ledger !== null) {
+            ledger.closeFromExec({ endLine: this.lineMark(session) - 1, exitCode: state.exitCode });
+          }
+        } catch { /* 台账是叠加层 */ }
       }
     }
     const value = {

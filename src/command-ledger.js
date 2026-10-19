@@ -105,7 +105,7 @@ export function createCommandLedger({
     record.status =
       closedBy === "session-end" && record.exitCode === null
         ? "unknown"
-        : closedBy === "shell-integration" || closedBy === "idle-timeout" || closedBy === "next-command"
+        : closedBy === "shell-integration" || closedBy === "idle-timeout" || closedBy === "next-command" || closedBy === "exec"
           ? "done"
           : "unknown";
     // 闭口时间可注入：调用方（如 closeIfIdle 的判定、测试）已经知道"现在"是什么时刻，
@@ -204,6 +204,16 @@ export function createCommandLedger({
     closeFromShellIntegration({ endLine, exitCode, at } = {}) {
       if (openId === null) return null;
       return closeRecord(get(openId), { endLine, exitCode, closedBy: "shell-integration", at });
+    },
+
+    /**
+     * exec 通道的确定性闭口：exec() 自带 exit code，跑完即真相大白，
+     * 不需要等空闲判定（判据②）或 OSC 133（判据①）。由 runPreparedExec
+     * 在输出镜像后调用。同一会话上更早的未闭口记录按 next-command 收口。
+     */
+    closeFromExec({ endLine, exitCode, at } = {}) {
+      if (openId === null) return null;
+      return closeRecord(get(openId), { endLine, exitCode, closedBy: "exec", at });
     },
 
     /**
