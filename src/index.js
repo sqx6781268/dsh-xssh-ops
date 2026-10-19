@@ -374,6 +374,8 @@ const settingsRecordSchema = z.object({
   filesFollowTerminal: z.boolean().optional(),
   // 最近一次保存服务器用的用户名（用户 2026-10-20）：新建表单默认预填它。
   lastUsername: z.string().optional(),
+  // Ctrl+滚轮 / 触控板捏合缩放字号（用户 2026-10-20），默认开。
+  wheelZoomEnabled: z.boolean().optional(),
   updatedAt: z.string().optional()
 });
 
@@ -619,7 +621,8 @@ export function loadSettingsRecord(record = {}) {
     broadcastHintDismissed: record.broadcastHintDismissed === true,
     terminalFileLinks: record.terminalFileLinks !== false,
     filesFollowTerminal: record.filesFollowTerminal !== false,
-    lastUsername: typeof record.lastUsername === "string" ? record.lastUsername : ""
+    lastUsername: typeof record.lastUsername === "string" ? record.lastUsername : "",
+    wheelZoomEnabled: record.wheelZoomEnabled !== false
   };
 }
 
@@ -950,7 +953,8 @@ export default class SshOpsService extends TypertRemoteService {
         broadcastHintDismissed: loaded.broadcastHintDismissed,
         terminalFileLinks: loaded.terminalFileLinks,
         filesFollowTerminal: loaded.filesFollowTerminal,
-        lastUsername: loaded.lastUsername
+        lastUsername: loaded.lastUsername,
+        wheelZoomEnabled: loaded.wheelZoomEnabled !== false
       };
       // Materialize the default: the flag is an operator-editable field of
       // xssh_ops_settings.json, so a record that predates it must gain the
@@ -2271,7 +2275,9 @@ export default class SshOpsService extends TypertRemoteService {
         sessionLogMaxAgeDays: Number.isSafeInteger(settings.sessionLogMaxAgeDays) ? settings.sessionLogMaxAgeDays : OUTPUT_LOG_DEFAULTS.sessionLogMaxAgeDays,
         broadcastHintDismissed: settings.broadcastHintDismissed === true,
         terminalFileLinks: settings.terminalFileLinks !== false,
-        filesFollowTerminal: settings.filesFollowTerminal !== false
+        filesFollowTerminal: settings.filesFollowTerminal !== false,
+        lastUsername: typeof settings.lastUsername === "string" ? settings.lastUsername : "",
+        wheelZoomEnabled: settings.wheelZoomEnabled !== false
       }
     };
   }
@@ -2283,7 +2289,7 @@ export default class SshOpsService extends TypertRemoteService {
    */
   async keepAliveSave(request = {}) {
     const patch = {};
-    const bools = ["sshKeepAliveEnabled", "idleStringEnabled", "tcpKeepAliveEnabled", "sessionLogAutoPruneEnabled", "broadcastHintDismissed", "terminalFileLinks", "filesFollowTerminal"];
+    const bools = ["sshKeepAliveEnabled", "idleStringEnabled", "tcpKeepAliveEnabled", "sessionLogAutoPruneEnabled", "broadcastHintDismissed", "terminalFileLinks", "filesFollowTerminal", "wheelZoomEnabled"];
     for (const key of bools) {
       if (typeof request[key] === "boolean") patch[key] = request[key];
     }

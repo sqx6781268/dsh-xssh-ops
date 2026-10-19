@@ -556,6 +556,11 @@ export function KeepAliveSettings({ api, connectionId = undefined }) {
           {t("识别终端里的文件名")}
         </label>
         <small style={styles.hint}>{t("开启后，终端输出中带已知后缀的文件名会加下划线，点击可在「文件 / 编辑器」页签里打开预览或编辑（需要先开启「文件页签跟随终端路径」）。")}</small>
+        <label style={{ ...styles.check, marginTop: 8 }}>
+          <input type="checkbox" checked={form.wheelZoomEnabled !== false} onChange={(event) => set("wheelZoomEnabled", event.target.checked)} />
+          {t("Ctrl+滚轮缩放字号")}
+        </label>
+        <small style={styles.hint}>{t("开启后，在终端里按住 Ctrl 滚动滚轮（触控板捏合同效）可调整字号 8–28；也可以在终端右上角的字体菜单里直接输入字号。")}</small>
       </SettingsGroup>
 
       <div style={styles.actions}>

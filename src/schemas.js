@@ -1066,7 +1066,9 @@ export const keepAliveSettingsSchema = z.object({
   sessionLogMaxAgeDays: z.number().int(),
   broadcastHintDismissed: z.boolean(),
   terminalFileLinks: z.boolean(),
-  filesFollowTerminal: z.boolean()
+  filesFollowTerminal: z.boolean(),
+  lastUsername: z.string(),
+  wheelZoomEnabled: z.boolean()
 });
 
 export const keepAliveGetRequestSchema = z.object({});
@@ -1157,7 +1159,9 @@ export const keepAliveSaveRequestSchema = z.object({
   sessionLogMaxAgeDays: z.number().int().min(0).max(3650).optional(),
   broadcastHintDismissed: z.boolean().optional(),
   terminalFileLinks: z.boolean().optional(),
-  filesFollowTerminal: z.boolean().optional()
+  filesFollowTerminal: z.boolean().optional(),
+  lastUsername: z.string().optional(),
+  wheelZoomEnabled: z.boolean().optional()
 });
 
 export const keepAliveSaveResultSchema = resultSchema(

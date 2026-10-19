@@ -210,7 +210,7 @@ function applyWorkspaceTheme(theme) {
 }
 
 /** One xterm view bound to one host session via long-poll reads / stream push. */
-function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse = null, background = null, lightTheme = false, customPrompts = [], font = null, onFontChange, onOpenFileToken = null, fileLinksEnabled = true, onCwdChange = null }) {
+function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse = null, background = null, lightTheme = false, customPrompts = [], font = null, onFontChange, onOpenFileToken = null, fileLinksEnabled = true, onCwdChange = null, wheelZoom = true }) {
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
   /** The pooled entry (terminal + addons) this mount attached to. */
@@ -228,6 +228,8 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
   const [menuSubmenu, setMenuSubmenu] = useState(null);
   // 字体控制（用户 2026-10-19）：A 选字体、+/- 调字号，与搜索按钮同一风格。
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  // 字体菜单里「字号」的显示值（applyFont 不更新面板 state，菜单自己同步）。
+  const [menuFontSize, setMenuFontSize] = useState(DEFAULT_TERMINAL_FONT.size);
   // 连点 +/- 时 React state 尚未回传，用 ref 记住刚刚生效的值，保证累计正确。
   const fontValueRef = useRef(font);
   fontValueRef.current = font ?? fontValueRef.current;
@@ -383,6 +385,22 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       flushInput();
     };
     const inputSubscription = term.onData(onData);
+
+    // Ctrl + 滚轮 / 触控板捏合缩放字号（用户 2026-10-20，设置页可关）。浏览器里
+    // 捏合就是带 ctrlKey 的 wheel 事件；累积判步，避免捏合连发的小 delta 逐事件跳档；
+    // 捕获阶段拦截，终端视口不滚动、页面不缩放。
+    let wheelAccum = 0;
+    const onWheel = (event) => {
+      if (!wheelZoom || !event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      wheelAccum += event.deltaY;
+      const step = wheelAccum >= 50 ? 1 : wheelAccum <= -50 ? -1 : 0;
+      if (step === 0) return;
+      wheelAccum = 0;
+      adjustFontSize(step);
+    };
+    container.addEventListener("wheel", onWheel, { passive: false, capture: true });
 
     // Ctrl + 滚轮缩放已移除（用户 2026-10-20：先观察 + / - 按钮是否仍卡）。
 
@@ -645,6 +663,7 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       pendingInput = "";
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("contextmenu", onContextMenu);
+      container.removeEventListener("wheel", onWheel, true);
       container.removeEventListener("mousedown", onMouseDown);
       selectionSubscription?.dispose?.();
       linkDisposable?.dispose?.();
@@ -793,7 +812,10 @@ ${menuSelection}`;
       ))}
       <div style={{ ...panelStyles.xtermWrap, position: "relative", zIndex: 1, background: bgEnabled ? "transparent" : undefined }} ref={containerRef} data-closed={closed || undefined} />
       <div style={panelStyles.fontControls}>
-        <button type="button" style={panelStyles.fontBtn} onClick={() => setFontMenuOpen((value) => !value)} title={t("选择字体")} aria-label={t("选择字体")}>A</button>
+        <button type="button" style={panelStyles.fontBtn} onClick={() => {
+            if (!fontMenuOpen) setMenuFontSize(Number(fontValueRef.current?.size ?? DEFAULT_TERMINAL_FONT.size));
+            setFontMenuOpen((value) => !value);
+          }} title={t("选择字体")} aria-label={t("选择字体")}>A</button>
         <button type="button" style={panelStyles.fontBtn} onClick={() => adjustFontSize(1)} title={t("增大字号")} aria-label={t("增大字号")}>+</button>
         <button type="button" style={panelStyles.fontBtn} onClick={() => adjustFontSize(-1)} title={t("减小字号")} aria-label={t("减小字号")}>−</button>
       </div>
@@ -808,10 +830,38 @@ ${menuSelection}`;
             >{choice.label}</button>
           ))}
           <div style={panelStyles.fontMenuDivider} />
+          <div style={panelStyles.fontMenuRow}>
+            <span style={panelStyles.fontMenuLabel}>{t("字号")}</span>
+            <button
+              type="button"
+              style={panelStyles.fontBtn}
+              title={t("减小字号")}
+              onClick={() => { const next = Math.max(8, menuFontSize - 1); setMenuFontSize(next); applyFont({ family: fontValueRef.current?.family ?? DEFAULT_TERMINAL_FONT.family, size: next }); }}
+            >−</button>
+            <input
+              type="number" min={8} max={28} step={1}
+              value={menuFontSize}
+              aria-label={t("字号")}
+              style={panelStyles.fontSizeInput}
+              onChange={(event) => {
+                const raw = Number(event.target.value);
+                if (!Number.isFinite(raw)) return;
+                const next = Math.min(28, Math.max(8, Math.round(raw)));
+                setMenuFontSize(next);
+                applyFont({ family: fontValueRef.current?.family ?? DEFAULT_TERMINAL_FONT.family, size: next });
+              }}
+            />
+            <button
+              type="button"
+              style={panelStyles.fontBtn}
+              title={t("增大字号")}
+              onClick={() => { const next = Math.min(28, menuFontSize + 1); setMenuFontSize(next); applyFont({ family: fontValueRef.current?.family ?? DEFAULT_TERMINAL_FONT.family, size: next }); }}
+            >+</button>
+          </div>
           <button
             type="button"
             style={panelStyles.fontMenuItem}
-            onClick={() => { applyFont(DEFAULT_TERMINAL_FONT); setFontMenuOpen(false); }}
+            onClick={() => { applyFont(DEFAULT_TERMINAL_FONT); setMenuFontSize(DEFAULT_TERMINAL_FONT.size); setFontMenuOpen(false); }}
           >{t("恢复默认（13px）")}</button>
         </div>
       )}
@@ -1631,6 +1681,8 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
   const [terminalFileLinks, setTerminalFileLinks] = useState(true);
   // 文件页签跟随终端路径（用户 2026-10-19）；关掉时终端文件名识别失效。
   const [filesFollowTerminal, setFilesFollowTerminal] = useState(true);
+  // Ctrl+滚轮/捏合缩放字号开关（用户 2026-10-20；设置页可关）。
+  const [wheelZoomEnabled, setWheelZoomEnabled] = useState(true);
   const [terminalCwd, setTerminalCwd] = useState(null);
   useEffect(() => {
     const refresh = () => {
@@ -1690,6 +1742,7 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
         if (typeof value?.broadcastHintDismissed === "boolean") setBroadcastHintDismissed(value.broadcastHintDismissed);
         if (typeof value?.terminalFileLinks === "boolean") setTerminalFileLinks(value.terminalFileLinks);
         if (typeof value?.filesFollowTerminal === "boolean") setFilesFollowTerminal(value.filesFollowTerminal);
+        if (typeof value?.wheelZoomEnabled === "boolean") setWheelZoomEnabled(value.wheelZoomEnabled);
       }).catch(() => {});
     };
     load();
@@ -2143,6 +2196,7 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
                         font={terminalFont}
                         onFontChange={changeTerminalFont}
                         fileLinksEnabled={terminalFileLinks && filesFollowTerminal}
+                        wheelZoom={wheelZoomEnabled}
                         onCwdChange={setTerminalCwd}
                         onOpenFileToken={(name) => { setTab("files"); setPendingFile({ name, cwd: terminalCwd }); }}
                         lightTheme={lightTheme}
@@ -2482,6 +2536,10 @@ const panelStyles = {
   fontMenuItem: { display: "block", width: "100%", padding: "5px 8px", background: "transparent", border: 0, color: "var(--dsh-xssh-ops-text, #d7dbe2)", fontSize: 12, textAlign: "left", borderRadius: 4, cursor: "pointer" },
   fontMenuItemActive: { background: "rgba(45,108,223,.25)" },
   fontMenuDivider: { height: 1, margin: "4px 6px", background: "var(--dsh-xssh-ops-border, #3a414b)" },
+  // 字体菜单里的「字号」行（用户 2026-10-20：显示当前字号并可直接设置）。
+  fontMenuRow: { display: "flex", alignItems: "center", gap: 6, padding: "6px 8px" },
+  fontMenuLabel: { flex: 1, fontSize: 12, color: "var(--dsh-xssh-ops-muted, #8b93a1)" },
+  fontSizeInput: { width: 52, padding: "3px 6px", borderRadius: 5, border: "1px solid var(--dsh-xssh-ops-border, #3a414b)", background: "var(--dsh-xssh-ops-surface, #161b21)", color: "inherit", fontSize: 12 },
   searchOpenBtn: {
     position: "absolute", top: 6, right: 10, zIndex: 5, display: "inline-flex", alignItems: "center", justifyContent: "center",
     width: 22, height: 22, padding: 0, borderRadius: 4, cursor: "pointer",
