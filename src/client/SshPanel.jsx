@@ -138,7 +138,9 @@ const terminalPool = createTerminalPool({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      scrollback: 5000,
+      // 2000 行：改字号时 xterm 会重排整个 scrollback，5000 行时桌面实测
+      // 2.8s（用户 2026-10-20）；2000 行能把重排压到约 1/3。
+      scrollback: 2000,
       // The search addon's match HIGHLIGHTS are gated behind this flag; the
       // search itself still works, but without it every find throws
       // "proposed API" and the reader sees no matches at all.
@@ -1479,7 +1481,7 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
         const __saveDt = (globalThis.performance?.now?.() ?? Date.now()) - __saveT0;
         if (__saveDt > 100) console.warn(`[xssh-font] keepAliveSave ${__saveDt.toFixed(0)}ms`);
       }).catch(() => {});
-    }, 500);
+    }, 1500);
   }, [api]);
   useEffect(() => {
     const onTheme = (event) => setLightTheme(event?.detail?.light === true);
