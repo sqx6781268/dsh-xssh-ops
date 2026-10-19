@@ -625,7 +625,18 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       // unmount. Connections are host-side and are not touched here either.
       terminalPool.release(sessionId, owner);
     };
-  }, [sessionId, connectionId, api, mouse, background, font]);
+  }, [sessionId, connectionId, api, mouse, background]);
+
+  // 字号/字体变化只更新选项，不重建上面的挂载 effect（否则每次调整都会重新
+  // acquire、重放缓冲、全屏 refresh —— 这正是 +/- 与滚轮卡顿的主因）。
+  useEffect(() => {
+    const term = entryRef.current?.term;
+    if (term === undefined || term === null) return;
+    try {
+      term.options.fontFamily = font?.family ?? DEFAULT_TERMINAL_FONT.family;
+      term.options.fontSize = Number(font?.size ?? DEFAULT_TERMINAL_FONT.size);
+    } catch { /* 忽略 */ }
+  }, [font]);
 
   const runSearch = (backwards) => {
     const search = entryRef.current?.search;
