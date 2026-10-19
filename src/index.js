@@ -4114,21 +4114,50 @@ export default class SshOpsService extends TypertRemoteService {
   }
 
   /** Current buffered text of a connection's first live shell session. */
-  readConnectionOutput(connectionId) {
+  readConnectionOutput(connectionId, mode = "full") {
     const conn = this.connections.get(connectionId);
     if (conn === void 0) return { ok: false, error: fail("no-connection", `connection "${connectionId}" does not exist`) };
     const first = [...conn.sessions].map((id) => this.sessions.get(id)).find((s) => s !== void 0 && s.exited === null);
     if (first === void 0) {
-      return { ok: true, value: { data: "", hasSession: false, truncated: false, redacted: false } };
+      return { ok: true, value: { data: "", hasSession: false, truncated: false, redacted: false, mode } };
     }
-    const redaction = redactForModel(first.captureBuffer);
+    const capture = first.captureBuffer;
+    const truncated = Buffer.byteLength(capture, "utf8") >= this.config.maxCaptureBytes;
+    if (mode === "new") {
+      // 增量读（上游 0.4.0 / 用户 2026-10-20）：只回上次读取之后的新输出，避免每
+      // 次 ssh_write 后模型重读整段历史。首读游标为 0（等于全量）。
+      // capture 是丢头保尾的 tail-cap：一旦发生过截断，游标语义失效 → 之后永久
+      // 回落为全量（latch，不能靠单次长度判断，缓冲可能停在上限不再增长）。
+      if (first.readCursorBroken === true) {
+        const redaction = redactForModel(capture);
+        return { ok: true, value: { data: redaction.text, hasSession: true, truncated, redacted: redaction.redacted, mode, cursorBroken: true } };
+      }
+      const from = Number.isSafeInteger(first.readCursor) && first.readCursor <= capture.length ? first.readCursor : 0;
+      const fresh = capture.slice(from);
+      first.readCursor = capture.length;
+      if (truncated) first.readCursorBroken = true;
+      const redaction = redactForModel(fresh);
+      return {
+        ok: true,
+        value: {
+          data: redaction.text,
+          hasSession: true,
+          truncated,
+          redacted: redaction.redacted,
+          mode,
+          noNewOutput: fresh.length === 0
+        }
+      };
+    }
+    const redaction = redactForModel(capture);
     return {
       ok: true,
       value: {
         data: redaction.text,
         hasSession: true,
-        truncated: Buffer.byteLength(first.captureBuffer, "utf8") >= this.config.maxCaptureBytes,
-        redacted: redaction.redacted
+        truncated,
+        redacted: redaction.redacted,
+        mode
       }
     };
   }
@@ -5423,7 +5452,7 @@ export default class SshOpsService extends TypertRemoteService {
   readCurrentConnection(request) {
     const selected = this.resolveConnection(request.connectionId);
     if (!selected.ok) return selected;
-    const result = this.readConnectionOutput(selected.connectionId);
+    const result = this.readConnectionOutput(selected.connectionId, request.mode);
     if (!result.ok) return result;
     return {
       ok: true,

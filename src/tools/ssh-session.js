@@ -298,7 +298,7 @@ export function registerSshSessionTools(ctx, service) {
     description: "Read from the current right-side SSH terminal. mode='full' (default) returns the buffered capture of the interactive shell (use after xssh_write, or when the user typed something in the panel). mode='lines' returns the numbered line journal instead: give from_line/to_line for a range, or tail_lines (default 50) for the newest lines (`0812 │ ...`); line numbers never change once issued. CHECK truncated/evicted: with mode='lines', evicted=true means older lines are gone for good. Content is redacted. Required after xssh_write: pass command_id (from its result) to wait for that command to close (wait_ms, default 15000, max 600000) and return its line-range output; this is the only supported way to read a command result — do not sleep and re-read.",
     parameters: {
       connection_id: { type: "string", description: "Optional. Omit to target the current right-side SSH connection." },
-      mode: { type: "string", enum: ["full", "lines"], description: "full (default) = buffered terminal capture; lines = numbered line journal." },
+      mode: { type: "string", enum: ["new", "full", "lines"], description: "new (default) = only output since the previous read of this session (no repetition); full = the whole buffered capture; lines = numbered line journal." },
       from_line: { type: "integer", description: "lines mode: first line of the range (1-based); use with to_line." },
       to_line: { type: "integer", description: "lines mode: last line of the range (inclusive)." },
       tail_lines: { type: "integer", description: `lines mode: newest N lines when no range is given; defaults to ${DEFAULT_TAIL_LINES}.` },
@@ -326,6 +326,9 @@ export function registerSshSessionTools(ctx, service) {
           evicted: { type: "boolean" },
           redacted: { type: "boolean" },
           commandId: { type: "string" },
+          mode: { type: "string" },
+          noNewOutput: { type: "boolean" },
+          cursorBroken: { type: "boolean" },
           status: { type: "string" },
           startLine: { type: "number" },
           endLine: { type: "number" },
@@ -340,11 +343,13 @@ export function registerSshSessionTools(ctx, service) {
           const body = value.text === "" ? t("（无输出）") : value.text;
           return [{ type: "text", text: `${head}\n${body}` }];
         }
-        const mode = args.mode === "lines" ? "lines" : "full";
-        if (mode === "full") {
+        const mode = args.mode === "lines" ? "lines" : args.mode === "full" ? "full" : "new";
+        if (mode !== "lines") {
           const body = value.hasSession === false
             ? "(no open shell session on this connection)"
-            : value.data || "(no output yet)";
+            : value.noNewOutput === true
+              ? "(no new output since the previous read)"
+              : value.data || "(no output yet)";
           const notes = [
             value.truncated ? "[terminal capture truncated]" : "",
             value.redacted ? "[sensitive values redacted]" : ""
@@ -377,9 +382,9 @@ export function registerSshSessionTools(ctx, service) {
         }
         return value;
       }
-      const mode = args.mode === "lines" ? "lines" : "full";
-      if (mode === "full") {
-        const result = service.readCurrentConnection({ connectionId: args.connection_id });
+      const mode = args.mode === "lines" ? "lines" : args.mode === "full" ? "full" : "new";
+      if (mode !== "lines") {
+        const result = service.readCurrentConnection({ connectionId: args.connection_id, mode });
         if (!result.ok) throw new Error(`xssh_read failed: ${result.error.message}`);
         // 全量捕获同时给出可读化文本（旧 xterm 视图的语义），避免 ANSI 转义
         // 把模型的输出搞乱；data 仍保留原始捕获，便于按需对照。
