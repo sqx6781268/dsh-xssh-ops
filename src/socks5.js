@@ -120,15 +120,33 @@ export function attachSocks5(socket, { forwardOut, onClose }) {
         if (request === null) return;
         if (request.ok === false) { fail(SOCKS_REPLY.ADDRESS_NOT_SUPPORTED); return; }
         if (request.unsupportedCommand) { fail(SOCKS_REPLY.COMMAND_NOT_SUPPORTED); return; }
+        // 消费请求帧本身：残留 buffer 只含客户端在握手窗口内管线化的载荷，
+        // 下面 flush 时必须只发这些字节，不能把握手帧一起写进隧道。
+        // 长度按 atyp 直接算（不改 parseRequest 的返回契约）：v4=10、v6=22、域名=5+len+2。
+        const atyp = buffer[3];
+        const frameLength = atyp === 0x01 ? 10 : atyp === 0x04 ? 22 : atyp === 0x03 ? 5 + (buffer[4] ?? 0) + 2 : 0;
+        buffer = buffer.subarray(frameLength);
         state = "open";
+        // 握手完成即让解析器退役：否则后续每一个转发分块都会继续 concat 进
+        // buffer，内存随流量无界增长（上游 0.3.22 实测 48MiB 转发 +204MiB 常驻）。
+        socket.removeListener("data", onData);
         try {
           forwardOut(request.host, request.port, (error, stream) => {
             if (error || !stream) { fail(replyCodeForError(error)); return; }
             socket.write(replyBytes(SOCKS_REPLY.SUCCEEDED));
             stream.on("error", () => socket.destroy());
             socket.on("error", () => stream.destroy());
-            socket.on("close", () => { stream.destroy(); closed(); });
+            // closed() 只在 socket close（下方一次注册）里调用：这里再调会把同一
+            // 连接的计数减两次（上游 0.3.22 的第三个缺陷）。
+            socket.on("close", () => { stream.destroy(); });
             stream.once("close", () => socket.destroy());
+            // 握手窗口内客户端可能已管线化载荷：先 flush 已读到的残余再接管 pipe，
+            // 否则这些字节既不在 buffer 转发里、也进不了之后的 pipe。
+            if (buffer.length > 0) {
+              const leftover = buffer;
+              buffer = Buffer.alloc(0);
+              try { stream.write(leftover); } catch { /* 对端已关：丢弃残余 */ }
+            }
             socket.pipe(stream);
             stream.pipe(socket);
           });
