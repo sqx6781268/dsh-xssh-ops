@@ -3814,12 +3814,16 @@ export default class SshOpsService extends TypertRemoteService {
     // agent-tool（COMMAND_SOURCES 里早已定义但从未使用的枚举值）。顺序：先 open 记
     // 命令行，再 appendSessionOutput 让输出落行日志，最后 closeFromExec 用 exec 自带
     // 的 exitCode 确定性闭口 —— 不依赖空闲判定。
+    // 台账 ID：exec 也记台账（见下），把第一条记录的 ID 回传，便于 AI 用
+    // xssh_read({command_id}) / xssh_command op=output 回查（用户 2026-10-20）。
+    let ledgerId = null;
     for (const sessionId of conn.sessions) {
       const session = this.sessions.get(sessionId);
       if (session && session.exited === null) {
         try {
           const ledger = this.ledgerFor(session);
           const record = ledger.open({ text: displayCommand, markLine: this.lineMark(session), source: "agent-tool", pressEnter: true });
+          ledgerId ??= record?.commandId ?? null;
           if (trashRun) ledger.markOutcome(record.commandId, { status: "done" });
         } catch { /* 台账是叠加层 */ }
         const prompt = session.lastPrompt ?? this.fallbackPrompt(conn);
@@ -3841,6 +3845,7 @@ export default class SshOpsService extends TypertRemoteService {
       cwd,
       display,
       commandId,
+      ledgerId,
       startedAt,
       finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAtMs,
@@ -5369,7 +5374,7 @@ export default class SshOpsService extends TypertRemoteService {
       };
     }
     if (!result.ok) return result;
-    const { exitCode, stdout, stderr, cwd, commandId, startedAt, finishedAt, durationMs, truncated, timedOut } = result.value;
+    const { exitCode, stdout, stderr, cwd, commandId, ledgerId, startedAt, finishedAt, durationMs, truncated, timedOut } = result.value;
     const safeStdout = redactForModel(stdout);
     const safeStderr = redactForModel(stderr);
     return {
@@ -5382,6 +5387,7 @@ export default class SshOpsService extends TypertRemoteService {
         stderr: safeStderr.text,
         cwd,
         commandId,
+        ...(ledgerId === null || ledgerId === undefined ? {} : { ledgerId }),
         startedAt,
         finishedAt,
         durationMs,

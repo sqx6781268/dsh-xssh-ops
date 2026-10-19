@@ -238,6 +238,7 @@ export function registerSshSessionTools(ctx, service) {
           stderr: { type: "string", required: true },
           cwd: { oneOf: [{ type: "string" }, { type: "null" }], required: true },
           commandId: { type: "string", required: true },
+          ledgerId: { type: "string" },
           startedAt: { type: "string", required: true },
           finishedAt: { type: "string", required: true },
           durationMs: { type: "integer", required: true },
@@ -275,7 +276,10 @@ export function registerSshSessionTools(ctx, service) {
         const cwdNote = value.cwd
           ? `[cwd: ${value.cwd}]`
           : "[cwd: login directory — no interactive shell directory detected]";
-        return [{ type: "text", text: `${cwdNote}\n${body}` }];
+        const ledgerNote = value.ledgerId
+          ? `\n[ledger id ${value.ledgerId} — xssh_read({command_id}) or xssh_command op=output to review]`
+          : "";
+        return [{ type: "text", text: `${cwdNote}\n${body}${ledgerNote}` }];
       }
     },
     async execute(args) {
