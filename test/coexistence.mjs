@@ -48,7 +48,7 @@ function tabAttrs(text) {
 {
   const mine = [...toolNames(ours)];
   const yours = toolNames(theirs);
-  assert.equal(mine.length, 13, `本插件应注册 R10 的 13 个入口工具（实际 ${mine.length}）`);
+  assert.equal(mine.length, 14, `本插件应注册 R10 的 13 个入口工具 + xssh_resource（实际 ${mine.length}）`);
   assert.ok(yours.size > 10, `上游应注册多个工具（实际 ${yours.size}）`);
   const overlap = mine.filter((name) => yours.has(name));
   assert.deepEqual(overlap, [],

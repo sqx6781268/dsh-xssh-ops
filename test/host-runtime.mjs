@@ -92,8 +92,8 @@ let hostModule;
   globalThis.setInterval = realSetInterval;
 
   assert.ok(instance !== null && typeof instance === "object", "应得到插件实例");
-  assert.equal(registeredTools.length, 13,
-    `构造期应注册 R10 的 13 个入口工具（实际 ${registeredTools.length} 个）`);
+  assert.equal(registeredTools.length, 14,
+    `构造期应注册 R10 的 13 个入口工具 + xssh_resource（实际 ${registeredTools.length} 个）`);
   // ⚠️ 计数口径提示：**不要**拿"产物里 `name: "xssh_*"` 的个数"来对账 ——
   // 那会把 4 个**存储域 id**（`xssh_ops_profiles` 等）也数进去，得到 37 而这里的
   // 运行时注册数是 33（实测核实过：差集正好是那 4 个域）。工具数就该看运行时注册。

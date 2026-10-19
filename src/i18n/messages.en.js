@@ -1141,4 +1141,14 @@ export const en = {
   "文件页签跟随终端路径": "Follow the terminal path in the Files tab",
   "开启后，在终端里 cd 到别的目录时，「文件」页签会自动切到该目录。": "When enabled, cd in the terminal switches the Files tab to that directory.",
   "开启后，终端输出中带已知后缀的文件名会加下划线，点击可在「文件 / 编辑器」页签里打开预览或编辑（需要先开启「文件页签跟随终端路径」）。": "When enabled, file names with known extensions in terminal output are underlined; click to open them in the Files/Editor tab (requires following the terminal path).",
+
+  // ── xssh_resource（AI 资源管理工具，2026-10-19）──
+  "凭据已保存": "credentials saved",
+  "凭据未配置": "credentials missing",
+  "代理": "proxy",
+  "代理密码已存": "proxy password saved",
+  "资源已${action}：${p.name}（${p.username}@${p.host}:${p.port}，id: ${p.profileId}；${flags}）": "Resource ${action}: ${p.name} (${p.username}@${p.host}:${p.port}, id: ${p.profileId}; ${flags})",
+  "· 已连接": "· connected",
+  "更新": "updated",
+  "已保存的资源（${lines.length}）：": "Saved resources (${lines.length}):",
 };

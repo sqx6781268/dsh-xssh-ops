@@ -86,6 +86,7 @@ import {
   DEFAULT_HOST_KEY_MODE
 } from "./hostkey.js";
 import { registerSshSessionTools } from "./tools/ssh-session.js";
+import { registerResourceTools } from "./tools/resource.js";
 import { registerTerminalLineTools } from "./tools/terminal-lines.js";
 import { registerBackgroundTools } from "./tools/exec-background.js";
 import { registerSftpTools } from "./tools/sftp.js";
@@ -6229,6 +6230,7 @@ export default class SshOpsService extends TypertRemoteService {
     // service instance via closure (defineTool invokes execute as a bare
     // function, so the tools reach service methods through this argument).
     registerSshSessionTools(ctx, this);
+    registerResourceTools(ctx, this);
     registerTerminalLineTools(ctx, this);
     registerBackgroundTools(ctx, this);
     registerSftpTools(ctx, this);

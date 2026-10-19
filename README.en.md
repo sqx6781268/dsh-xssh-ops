@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.3.20-blue)
+![version](https://img.shields.io/badge/version-0.1.3-blue)
 [![dsh.so risk](https://www.dsh.so/badge/dsh-xssh-ops.svg)](https://www.dsh.so/artifact/dsh-xssh-ops/)
 [![dsh.so install · dsh 0.2.0-rc.1](https://www.dsh.so/badge/install/dsh-xssh-ops@0.2.0-rc.1.svg)](https://www.dsh.so/artifact/dsh-xssh-ops/)
 [![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/caoyiwei850/dsh-xssh-ops)
@@ -102,7 +102,7 @@ The same model covers `sftp_delete` (the agent no longer deletes directly; inste
 ### From GitHub (recommended)
 
 ```bash
-dsh plugin --profile web add github:caoyiwei850/dsh-xssh-ops#v0.3.20
+dsh plugin --profile web add github:caoyiwei850/dsh-xssh-ops#v0.1.3
 ```
 
 The git channel installs source; the `prepare` hook runs `npm run build` during install to produce the `lib/` entry files, so no manual build is needed. **Note: pnpm ≥ 10 blocks dependency build scripts by default** — if the SSH tab does not appear after restart, check `node_modules/dsh-xssh-ops/lib/` as described in [INSTALL.md](INSTALL.md) step 3: if it is missing, the build was blocked; run `npm install && npm run build` inside that package directory (or allowlist `dsh-xssh-ops` in the profile's pnpm `onlyBuiltDependencies`) and restart.
@@ -117,14 +117,14 @@ Open any session, click the top **SSH** tab, and use the right-side panel to con
 
 ### From a release archive
 
-Download `dsh-xssh-ops-0.3.20.tgz` from [GitHub Releases](https://github.com/caoyiwei850/dsh-ssh-ops/releases/tag/v0.3.20), then:
+Download `dsh-xssh-ops-0.1.3.tgz` from [GitHub Releases](https://github.com/caoyiwei850/dsh-ssh-ops/releases/tag/v0.1.3), then:
 
 ```bash
-dsh plugin --profile web add /path/to/dsh-xssh-ops-0.3.20.tgz
+dsh plugin --profile web add /path/to/dsh-xssh-ops-0.1.3.tgz
 dsh web
 ```
 
-`dsh-xssh-ops-0.3.20.zip` is for offline review or further development; extract it and run `npm install` in the directory (the build runs automatically).
+`dsh-xssh-ops-0.1.3.zip` is for offline review or further development; extract it and run `npm install` in the directory (the build runs automatically).
 
 ## Usage
 
@@ -156,6 +156,8 @@ dsh web
 - `language` — `"zh"` or `"en"`, the pinned language used while `autoApplySystemLanguage` is `false`; ignored while auto-follow is on.
 - Edit the file while the harness is **stopped** (a running instance may rewrite it on load) and restart the harness afterwards to apply the change.
 ### Agent tools
+
+> **Note:** The tool tables below predate the fork (they still describe upstream `dsh-ssh-ops` names such as `xssh_list` / `db_*`). This plugin diverged since 0.1.1 and now exposes **14 consolidated tools** (`xssh_*` / `xsftp_*` / `xtunnel`, including `xssh_resource` for AI-managed saved resources). See the Chinese README (README.md) for the authoritative, current list.
 
 There are 35 agent tools. Omitting `connection_id` / `db_connection_id` targets the active connection — **no need to call `xssh_list` / `db_list_connections` first**.
 
@@ -237,8 +239,8 @@ Pushing a `vX.Y.Z` tag that matches `package.json.version` runs tests, builds th
 
 Artifacts are written to `release/`:
 
-- `dsh-xssh-ops-0.3.20.tgz`: installable directly by DSH.
-- `dsh-xssh-ops-0.3.20.zip`: full offline source archive.
+- `dsh-xssh-ops-0.1.3.tgz`: installable directly by DSH.
+- `dsh-xssh-ops-0.1.3.zip`: full offline source archive.
 
 ## Contributors
 

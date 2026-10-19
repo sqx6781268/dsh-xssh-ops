@@ -52,7 +52,7 @@ for (const file of files) {
   }
 }
 
-assert.equal(registrations.length, 13, `应找到 R10 的 13 个入口工具注册（实际 ${registrations.length}）`);
+assert.equal(registrations.length, 14, `应找到 R10 的 13 个入口工具 + xssh_resource（实际 ${registrations.length}）`);
 
 // ── 1. 每个注册名都必须带本项目前缀 ────────────────────────────────────────
 {

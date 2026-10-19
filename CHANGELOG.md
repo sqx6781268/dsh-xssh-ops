@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 - 2026-10-19
+
+- **新增：`xssh_resource` —— AI 可添加/保存 SSH 资源的工具入口（第 14 个入口工具）**：此前 `profileSave` 一族 RPC 只暴露给 Web UI 客户端，AI 没有任何添加/修改已保存资源的通道——现场排障时（如「外网应用」资源漏配 SOCKS5 代理）AI 只能直连硬闯，不能替操作员把资源修好保存。新工具 `src/tools/resource.js` 提供 `list` / `save` 两个 op：`list` 列出资源坐标、认证方式、凭据/代理配置状态与连接状态（绝不回显任何秘密）；`save` 新建（不传 `profile_id`）或更新（传 `profile_id`）资源，支持坐标、host-key 模式、分组与 SOCKS5 代理。**边界（有意为之）**：① 不提供 delete——`profileDelete` 会连带 unset 全部凭据且不可逆，删除属操作员决策面；② 密码/私钥/passphrase/代理密码经 `credentials.set` 写入凭据存储，与 UI 保存路径（`SshResources.jsx credentialWrite`）使用完全相同的 ref 约定（`DSH_SSH_OPS_<stem>_…`），**绝不**进 `profileSave` 请求体或资源记录（服务端 schema 本就如此设计）；③ 更新时留空凭据 = 保留原值，显式传值 = 覆盖；④ 凭据写失败时自动回滚半保存的资源记录并如实报错，不假装成功。i18n 七条新文案入双语词典（提取器零漂移）；`test/resource-tool.mjs` 新增七组用例（注册、列表无秘密、新建写凭据且 ref 与 UI 同名、更新留空保留/传值覆盖、缺参报错、未知 op 报错），`tool-namespace` / `coexistence` / `host-runtime` 工具计数 13→14 同步。
+- **修复：`xssh_exec` 不记命令台账（用户报告）**：`runPreparedExec` 此前只把命令与输出镜像到终端显示，从不调用 `ledger.open()`，`xssh_command` 与命令台账里查不到任何 agent 经 exec 跑过的命令（`COMMAND_SOURCES` 的 `agent-tool` 枚举定义了但从未使用）。修复分两处：`command-ledger.js` 新增 `closeFromExec()` 闭口路径——exec 通道自带 exit code，跑完即确定性闭口（`closedBy="exec"`、status=done），不依赖空闲判定或 OSC 133，且与 `closeFromShellIntegration` 同约定（无未闭口记录返回 null，先到先定不改写）；`index.js` 的会话镜像循环内按「先 `open(source:"agent-tool")` 记命令行 → 输出落行日志 → `closeFromExec(exitCode)` 闭口」的顺序为每条活会话留痕（行号与终端回显对得上），trashRun 闭环标 done。`test/command-ledger.mjs` 新增 `closeFromExec` 用例块（合法枚举、确定性闭口、先到先定、非零退出码）。
+
 ## 0.3.20 - 2026-10-13
 
 - **增强：删除 SSH 资源时同步清除主机指纹信任记录**：删除资源后该主机不再残留于「已信任主机（未保存为资源）」列表——此前删掉资源卡片，信任记录仍在，列表里留下一张"孤儿"卡片。复用既有 `forgetHostKey` RPC，best-effort（清指纹失败不阻断删除流程）。

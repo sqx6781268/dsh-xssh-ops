@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.2-blue)
+![version](https://img.shields.io/badge/version-0.1.3-blue)
 
 ## 功能
 
@@ -90,7 +90,7 @@ tar -xzf dsh-xssh-ops-0.1.2.tar.gz
 dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -121,7 +121,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2.tgz
 
 ## 给 AI 的工具（可选）
 
-如果你只在 DSH 里当终端用，这一节可以跳过。对话中的 AI 通过 13 个工具入口操作同一批连接与终端，每个入口用 `op` / `mode` 选择动作：
+如果你只在 DSH 里当终端用，这一节可以跳过。对话中的 AI 通过 14 个工具入口操作同一批连接与终端，每个入口用 `op` / `mode` 选择动作：
 
 **核心 7 个**
 
@@ -139,6 +139,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2.tgz
 
 | 工具 | 用途 |
 | --- | --- |
+| `xssh_resource` | `op: list \| save`（列出已保存资源 / AI 新建或更新资源；凭据走凭据存储，绝不回显；删除仅供操作员） |
 | `xssh_task` | `op: list \| status \| read \| delete` |
 | `xssh_terminal` | `op: sessions \| context \| shell_integration` |
 | `xssh_session_log` | `op: list \| search \| read` |
@@ -153,11 +154,15 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2.tgz
 **这是一个可以独立使用的 SSH 插件，也是给 AI 协作准备的 SSH 插件。**
 
 - **单独用**：右侧 SSH 面板里连接服务器、用完整终端、管理远端文件（文件页签 + 编辑器页签）、预览图片与 Office/PDF 文档、端口转发、会话日志。这些能力不依赖对话，也不需要 AI。
-- **与 AI 协作**：同一批连接同时以 13 个工具（`xssh_*` / `xsftp_*` / `xtunnel`）暴露给对话中的 AI——它可以跑命令、读输出、传文件、开转发，所有动作都在面板里可见、危险命令会先被拦下等你确认。
+- **与 AI 协作**：同一批连接同时以 14 个工具（`xssh_*` / `xsftp_*` / `xtunnel`）暴露给对话中的 AI——它可以跑命令、读输出、传文件、开转发、增改已保存资源，所有动作都在面板里可见、危险命令会先被拦下等你确认。
 
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-19 · xssh_resource 工具 + xssh_exec 台账修复（v0.1.3）
+- 新增 `xssh_resource`（第 14 个工具）：AI 可 `list` / `save` 已保存 SSH 资源（坐标、host-key 模式、分组、SOCKS5 代理）；密码/私钥/代理密码走凭据存储（与 UI 同一 ref），绝不进请求体或记录；更新时留空凭据 = 保留原值；删除刻意不暴露（操作员决策面）
+- 修复 `xssh_exec` 不记命令台账的缺口：新 `closeFromExec` 确定性闭口（exec 自带 exit code），`xssh_command` 现在能查到 agent 经 exec 跑过的每条命令（source=agent-tool）
 
 ### 2026-10-19 · 文件/编辑器/预览与终端联动
 - 文件页签：三视图（列表 / 图标 / 详细）、类型图标（图片/音频/视频/压缩包/Office/代码/字体/二进制等）、`../` 返回上级、自定义右键菜单、图片在线预览（16 MB 上限）、「提交到会话框」（把远端文件作为附件放进对话输入框）
