@@ -215,18 +215,27 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
   // 连点 +/- 时 React state 尚未回传，用 ref 记住刚刚生效的值，保证累计正确。
   const fontValueRef = useRef(font);
   fontValueRef.current = font ?? fontValueRef.current;
+  const fontPersistTimer = useRef(null);
   const applyFont = (next) => {
     const value = { family: next.family ?? DEFAULT_TERMINAL_FONT.family, size: next.size ?? DEFAULT_TERMINAL_FONT.size };
     fontValueRef.current = value;
-    // 池里的终端共享同一份设置：全部应用，避免切换会话后字号不一致。
-    terminalPool.forEachTerm((term) => {
-      try {
-        term.options.fontFamily = value.family;
-        term.options.fontSize = value.size;
-      } catch { /* 忽略个别终端的异常 */ }
-    });
-    try { entryRef.current?.fit?.fit?.(); } catch { /* 忽略 */ }
-    onFontChange?.(value);
+    // 只即时更新**当前可见**终端：其它池化终端在下一次挂载时按 font 值应用（mount 里
+    // 已有这段赋值）。此前每次调整都对池里所有终端逐台重排（xterm 字号变化会重新测量
+    // 字符并重绘），滚轮/连点 +/- 时的卡顿主要来自这里。
+    const term = entryRef.current?.term;
+    if (term !== undefined && term !== null) {
+      try { term.options.fontSize = value.size; } catch { /* 忽略个别终端的异常 */ }
+      try { term.options.fontFamily = value.family; } catch { /* 同上 */ }
+    }
+    // 持久化 + 尺寸适配都防抖：连续滚轮/连点只在停下来后 fit 一次并写一次设置。
+    // （每次 fontSize 变化后立刻 fit 会向远端发 PTY resize，shell 收到 SIGWINCH
+    // 重绘提示符，连续调整时会明显卡顿。）
+    if (fontPersistTimer.current !== null) clearTimeout(fontPersistTimer.current);
+    fontPersistTimer.current = setTimeout(() => {
+      fontPersistTimer.current = null;
+      try { entryRef.current?.fit?.fit?.(); } catch { /* 忽略 */ }
+      onFontChange?.(fontValueRef.current);
+    }, 200);
   };
   const adjustFontSize = (delta) => {
     const current = Number(fontValueRef.current?.size ?? DEFAULT_TERMINAL_FONT.size);
