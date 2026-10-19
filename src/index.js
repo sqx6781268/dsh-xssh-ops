@@ -4023,7 +4023,8 @@ export default class SshOpsService extends TypertRemoteService {
   async readCommandOutput(request = {}) {
     const commandId = String(request.commandId ?? "");
     if (commandId === "") return { ok: false, error: fail("bad-request", "commandId is required") };
-    const waitMs = Math.min(Math.max(Number(request.waitMs ?? 15000) || 0, 0), 60000);
+    // 默认 15s 不变；上限放宽到 10 分钟（用户 2026-10-20），长编译/长任务用得上。
+    const waitMs = Math.min(Math.max(Number(request.waitMs ?? 15000) || 0, 0), 600000);
     const find = () => {
       for (const session of this.sessions.values()) {
         const ledger = session.commandLedger;
