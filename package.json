@@ -1,0 +1,108 @@
+{
+  "name": "dsh-xssh-ops",
+  "description": "XSSH ops for DSH Web UI: connect to servers over SSH (terminal / SFTP / tunnels), edit commands locally, correlate every command with its output line range, and run background jobs whose results land in remote temp files. Host half manages sessions with ssh2; client half renders the terminal, the line-number view and the command ledger.",
+  "icon": "./icon.svg",
+  "version": "0.1.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sqx6781268/dsh-xssh-ops.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sqx6781268/dsh-xssh-ops/issues"
+  },
+  "homepage": "https://github.com/sqx6781268/dsh-xssh-ops#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "ssh",
+    "terminal",
+    "xterm",
+    "ops",
+    "sftp"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./typert": {
+      "default": "./lib/typert.js"
+    },
+    "./remote": {
+      "default": "./lib/remote.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "scripts",
+    "cordis.patch.yml",
+    "INSTALL.md",
+    "LICENSE",
+    "icon.svg",
+    "locale/*.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web"
+    }
+  },
+  "dependencies": {
+    "@file-viewer/doc": "^3.2.2",
+    "@file-viewer/preset-office": "^3.2.2",
+    "@file-viewer/react": "^3.2.2",
+    "@xterm/addon-search": "0.15.0",
+    "monaco-editor": "^0.52.2",
+    "react-dom": "^18.3.1",
+    "ssh2": "^1.16.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-credentials": ">=0.1.5-alpha.1",
+    "@deepseek-ai/dsh-storage-domain": ">=0.1.5-alpha.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.5-alpha.1",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.5-alpha.1"
+  },
+  "peerDependenciesMeta": {},
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-credentials": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.1.2-rc.1",
+    "@eslint/js": "^10.0.1",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "esbuild": "^0.24.2",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "react": "^18.3.1"
+  },
+  "scripts": {
+    "gen:xterm-css": "node scripts/gen-xterm-css.mjs",
+    "build:host": "node scripts/build-host.mjs",
+    "build:client": "node scripts/build-monaco.mjs && node scripts/build-file-viewer.mjs && node scripts/build-client.mjs",
+    "build": "npm run gen:xterm-css && npm run build:host && npm run build:client",
+    "prepare": "npm run build",
+    "lint": "eslint .",
+    "bump:readme": "node scripts/bump-readme.mjs",
+    "test": "node --test test/line-journal.mjs test/command-ledger.mjs test/terminal-lines.mjs test/keepalive.mjs test/task-ledger.mjs test/exec-background.mjs test/idle-string.mjs test/task-contract.mjs test/session-script.mjs test/login-script-tick.mjs test/wiring-audit.mjs test/exec-background-posix-e2e.mjs test/r8-r9-e2e.mjs test/coexistence.mjs test/client-components.mjs test/host-runtime.mjs test/rpc-schema.mjs test/exec-background-bare-remote-e2e.mjs test/exec-background-e2e.mjs test/login-script-dsl.mjs test/task-dir.mjs test/tab-marker.mjs test/tool-namespace.mjs test/plugin-identity.mjs test/login-script.mjs test/safety.mjs test/trash.mjs test/ssh-auth.mjs test/ssh-agent.mjs test/dual-factor.mjs test/sftp-dir.mjs test/ssh-legacy-kex.mjs test/ssh-banner.mjs test/hostkey.mjs test/scp.mjs test/client.mjs test/manifest.mjs test/ssh-write.mjs test/credentials.mjs test/sftp-tools.mjs test/stream-file-routes.mjs test/manual-terminal-context.mjs test/terminal-stream.mjs test/exec-cwd.mjs test/login-command.mjs test/terminal-pool.mjs test/terminal-theme.mjs test/pane-selection.mjs test/profile-connection.mjs test/active-connection.mjs test/agent-connect.mjs test/agent-connection-poll.mjs test/sidebar-integration.mjs test/sidebar-lifecycle.mjs test/review-regressions.mjs test/project-directory.mjs test/domain-records.mjs test/typert-sync.mjs test/sftp-files-ui.mjs test/socks5.mjs test/socks5-client.mjs test/proxy-schema.mjs test/proxy-errors.mjs test/proxy-dial.mjs test/proxy-profile-connect.mjs test/proxy-tool.mjs test/session-log.mjs test/terminal-text.mjs test/terminal-search.mjs test/shell-integration.mjs test/local-sshd-sftp.mjs test/resource-group-collapse.mjs test/resource-card-layout.mjs test/i18n.mjs test/tool-contract.mjs",
+    "install:dev": "node scripts/install-dev.mjs",
+    "pack:release": "npm run build && node scripts/package-release.mjs",
+    "i18n:extract": "node scripts/i18n-extract.mjs",
+    "test:e2e": "node test/m1-m3-e2e.mjs && node test/r8-r9-e2e.mjs && node test/exec-background-e2e.mjs && node test/exec-background-bare-remote-e2e.mjs && node test/exec-background-posix-e2e.mjs && node test/exec-background-tool-e2e.mjs"
+  }
+}

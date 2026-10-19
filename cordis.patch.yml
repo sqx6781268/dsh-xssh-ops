@@ -1,0 +1,5 @@
+# dsh-xssh-ops bundle patch: registers the SSH ops plugin entry.
+# Install with: dsh plugin --profile web add dsh-xssh-ops
+- insert:
+    - id: xssh-ops
+      name: 'dsh-xssh-ops'

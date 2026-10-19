@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        node-version: [20, 22]
+        os: [ubuntu-latest]
+        include:
+          # Path-class regressions (path separators, drive-letter URLs, platform
+          # binaries) never reproduce on a Linux-only matrix — the i18n checker's
+          # Windows path bug (found in PR #28) is the precedent. One Windows leg
+          # on the newest LTS is enough to catch that class.
+          - os: windows-latest
+            node-version: 22
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      # lib/ is a build output (never committed) and db-lazy-load asserts the
+      # built artifact, so the bundles must exist before the tests run.
+      - name: Build host + client bundles
+        run: npm run build
+      - name: Run tests
+        run: npm test
+
+  # #29: the recommended github: channel installs a source tarball; the entry
+  # files under lib/ only exist if the prepare hook builds them at install
+  # time. Simulate exactly that path (git archive == codeload tarball) and
+  # assert the artifacts land on disk before a release may ship.
+  git-channel:
+    name: Git-channel install produces lib/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: "Install a source snapshot the way github: deps install"
+        run: |
+          mkdir -p /tmp/gitpkg
+          git archive HEAD | tar -x -C /tmp/gitpkg
+          cd /tmp/gitpkg
+          npm install --no-audit --no-fund
+          test -f lib/index.js
+          test -f lib/client.js
+
+  # npm/tgz users install a CI-built tarball whose file set is invisible from a
+  # link:-mounted dev tree (the local tree always has lib/ on disk). Pack the
+  # real artifact, install it the way a registry tarball installs (no prepare
+  # run — tarballs are presumed pre-built), and import the runtime entries so
+  # a packaging drift fails here, before the tag, not on a user's host.
+  npm-channel:
+    name: Packed tarball installs and loads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Pack the publishable tarball
+        run: |
+          npm ci
+          mkdir -p /tmp/npmpkg
+          npm pack --pack-destination /tmp/npmpkg
+      - name: Install the tarball into a clean prefix (no scripts, like a registry install)
+        run: |
+          # Derive the package name from package.json: a hard-coded name here
+          # silently rots the day the package is renamed (this fork renamed
+          # dsh-ssh-ops -> dsh-xssh-ops and this step kept asserting the old one).
+          PKG_NAME="$(node -p "require('./package.json').name")"
+          echo "PKG_NAME=${PKG_NAME}" >> "$GITHUB_ENV"
+          mkdir -p /tmp/npmsmoke
+          cd /tmp/npmsmoke
+          npm init -y >/dev/null
+          TARBALL="$(ls /tmp/npmpkg/${PKG_NAME}-*.tgz 2>/dev/null || true)"
+          if [ -z "$TARBALL" ]; then
+            echo "::error::no packed tarball matching ${PKG_NAME}-*.tgz under /tmp/npmpkg"; ls -l /tmp/npmpkg; exit 1
+          fi
+          npm install --no-audit --no-fund "$TARBALL"
+          test -f "node_modules/${PKG_NAME}/lib/index.js"
+          test -f "node_modules/${PKG_NAME}/lib/client.js"
+      - name: Import the runtime entries from the installed package
+        run: |
+          cd /tmp/npmsmoke
+          test -d "node_modules/${PKG_NAME}/lib"
+          node --input-type=module -e "
+            const base = 'file:///tmp/npmsmoke/node_modules/${PKG_NAME}/lib/';
+            await import(base + 'typert.js');
+            await import(base + 'remote.js');
+            await import(base + 'index.js');
+            console.log('npm-channel smoke: runtime entries import cleanly');
+          "
+
+  # The end-to-end suite drives a real SSH server (test/../test-sshd.mjs) over real
+  # ssh2 channels. Two of its scripts assert on Windows-host fixtures — cmd.exe as
+  # the non-POSIX remote, Git Bash's sh.exe as the coreutils-less remote — so this
+  # job runs on the Windows leg; those scripts skip themselves on other platforms
+  # (see the platform gate at the top of each file). Keeping the suite in CI means
+  # the "tested locally once" e2e path cannot silently rot.
+  e2e:
+    name: End-to-end suite (real SSH channels)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build host + client bundles
+        run: npm run build
+      - name: Run the end-to-end suite
+        run: npm run test:e2e
+
+  release:
+    name: Publish npm and GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, git-channel, npm-channel, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Verify tag matches package version
+        run: |
+          test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
+      - name: Install, test, and package release assets
+        run: npm ci && npm run build && npm test && npm run pack:release
+      - name: Publish the exact packaged tarball to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish "./release/$(node -p "require('./package.json').name")-$(node -p "require('./package.json').version").tgz" --access public
+      - name: Create GitHub Release with the same tarball and source archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/*.tgz release/*.zip --generate-notes
