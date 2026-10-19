@@ -259,6 +259,18 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     ensureStyles();
     const container = containerRef.current;
     if (!container) return undefined;
+    // 提示符 cwd 解析（用户 2026-10-19/20）：`user@host:/path# ` 或 `~`。
+    // 定义在挂载之前，首次重放（池复用）时也能解析一次当前目录。
+    const onCwdChangeRef = { current: onCwdChange };
+    const parsePromptCwd = (text) => {
+      const match = /(?:^|[\r\n])[^\r\n]*?@[^\s:]+:([^\r\n#$]*)[#$]\s*$/.exec(text);
+      if (!match) return null;
+      let value = match[1].trim();
+      if (value === "") return null;
+      if (value === "~") value = "/root";
+      else if (value.startsWith("~/")) value = `/root${value.slice(1)}`;
+      return value.startsWith("/") ? value : null;
+    };
     const owner = { sessionId };
     const entry = terminalPool.acquire(sessionId, owner);
     entryRef.current = entry;
@@ -291,6 +303,15 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     } else {
       term.open(container);
     }
+
+    // 池复用/首次挂载时缓冲区里可能已有提示符：立刻解析一次当前目录。
+    // 否则刚打开面板时 terminalCwd 是 null，点 ~ 里的文件名会打不开（用户 2026-10-20）。
+    try {
+      const buffer = term.buffer.active;
+      const line = buffer.getLine(buffer.baseY + buffer.cursorY);
+      const cwd = parsePromptCwd(line?.translateToString(true) ?? "");
+      if (cwd !== null) onCwdChangeRef.current?.(cwd);
+    } catch { /* 忽略 */ }
 
     let alive = true;
     let writing = false;
@@ -466,16 +487,6 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     };
     // 提示符 cwd 解析（用户 2026-10-19）：`user@host:/path# ` 或 `~`；
     // 供「文件」页签跟随终端当前目录，以及文件名链接的路径解析。
-    const onCwdChangeRef = { current: onCwdChange };
-    const parsePromptCwd = (text) => {
-      const match = /(?:^|[\r\n])[^\r\n]*?@[^\s:]+:([^\r\n#$]*)[#$]\s*$/.exec(text);
-      if (!match) return null;
-      let value = match[1].trim();
-      if (value === "") return null;
-      if (value === "~") value = "/root";
-      else if (value.startsWith("~/")) value = `/root${value.slice(1)}`;
-      return value.startsWith("/") ? value : null;
-    };
     const showItem = ({ data, exit, startOffset, offset }) => {
       const fresh = entry.consume(data ?? "", startOffset, offset);
       if (fresh) {
