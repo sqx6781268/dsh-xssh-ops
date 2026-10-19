@@ -2522,9 +2522,10 @@ const panelStyles = {
   viewTabActive: { padding: "2px 8px", fontSize: 12, borderRadius: 4, cursor: "pointer", background: "rgba(45,108,223,.18)", color: "var(--dsh-xssh-ops-text, #d7dbe2)", border: "1px solid #2d6cdf" },
   viewNote: { fontSize: 11, color: "var(--dsh-xssh-ops-muted, #8b93a1)" },
   emptyState: { margin: "auto", fontSize: 12, color: "var(--dsh-xssh-ops-muted, #8b93a1)", textAlign: "center" },
-  // contain: layout paint —— xterm 改字号时读取/改写布局只在容器内生效，
-  // 不再让宿主的大页面（长对话）参与全页 reflow（用户 2026-10-20 桌面实测卡 3s）。
-  xtermWrap: { flex: 1, minWidth: 0, overflow: "hidden", contain: "layout paint" },
+  // 注意：不要给终端容器加 `contain: layout paint`（用户 2026-10-20 实测）：xterm 改字号
+  // 时会反复测量容器尺寸，容器成为独立布局根后每次测量都要重算其内部布局，web 端口实测
+  // 从 247ms 恶化到 3858ms；移除后恢复。overflow: hidden 已足够限制绘制范围。
+  xtermWrap: { flex: 1, minWidth: 0, overflow: "hidden" },
   xtermHost: { position: "relative", display: "flex", flex: 1, minWidth: 0, minHeight: 0 },
   // 终端右键菜单与提示条（用户 2026-10-18）。
   termMenu: { position: "fixed", zIndex: 96, minWidth: 150, padding: 4, borderRadius: 7, background: "#2b2f36", border: "1px solid rgba(0,0,0,.3)", boxShadow: "0 8px 24px rgba(0,0,0,.3)" },
