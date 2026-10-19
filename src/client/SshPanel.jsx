@@ -348,21 +348,7 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     };
     const inputSubscription = term.onData(onData);
 
-    // Ctrl + 滚轮 / 触控板捏合缩放字号（上游 0.4.0）：浏览器里捏合就是带 ctrlKey
-    // 的 wheel 事件。累积判步，避免捏合连发的小 delta 逐事件跳档；捕获阶段拦截，
-    // 终端视口不滚动、浏览器页面不缩放。
-    let wheelAccum = 0;
-    const onWheel = (event) => {
-      if (!event.ctrlKey || event.metaKey) return;
-      event.preventDefault();
-      event.stopPropagation();
-      wheelAccum += event.deltaY;
-      const step = wheelAccum >= 50 ? 1 : wheelAccum <= -50 ? -1 : 0;
-      if (step === 0) return;
-      wheelAccum = 0;
-      adjustFontSize(step);
-    };
-    container.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    // Ctrl + 滚轮缩放已移除（用户 2026-10-20：先观察 + / - 按钮是否仍卡）。
 
     // Search runs over this terminal's live scrollback via the addon; the
     // pane only adds the bar, the count and the keyboard path. Ctrl/Cmd+F is
@@ -623,7 +609,6 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       pendingInput = "";
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("contextmenu", onContextMenu);
-      container.removeEventListener("wheel", onWheel, true);
       container.removeEventListener("mousedown", onMouseDown);
       selectionSubscription?.dispose?.();
       linkDisposable?.dispose?.();
