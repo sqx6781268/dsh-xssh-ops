@@ -129,9 +129,9 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 | --- | --- |
 | `xssh_connect` | 连接：`target` 选已保存服务器，或 `host`+`username`+`auth` 直连；`proxy_probe` 只探测 SOCKS5 |
 | `xssh_connection` | `op: list \| disconnect` |
-| `xssh_exec` | 执行一条命令并返回 stdout/stderr/cwd/退出码 |
-| `xssh_read` | `mode: full \| lines`（全量捕获或按行号区间读取） |
-| `xssh_write` | 向终端写入（默认带回车） |
+| `xssh_exec` | 独立非交互通道：执行一条命令并返回 stdout/stderr/cwd/退出码（终端里可见的命令请走下面的 write → read） |
+| `xssh_read` | `mode: full \| lines`，或给 `command_id`（等这条命令闭口后返回它的行区间输出；默认等 15s，上限 10 分钟） |
+| `xssh_write` | 向终端写入（默认带回车）；回车提交的命令返回 `commandId`，随后用 `xssh_read({command_id})` 等结果 |
 | `xssh_command` | `op: list \| output`（命令台账与单条命令输出） |
 | `xssh_exec_background` | 后台任务下发（远端临时目录优先，降级会明确告警） |
 
@@ -149,6 +149,18 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 
 危险命令（如 `rm -rf`）由插件拦截并弹出确认卡片，只有操作员能确认执行；被拦截的命令同样记入台账，命令编辑框里会出现带逐行注释的可读版本（作用/影响范围/风险/执行方式）。
 
+### 命令执行：write → read 是规定路径
+
+跑命令统一用 `xssh_write`（默认回车提交）→ 拿到返回的 `commandId` → `xssh_read({ command_id })`；`read` 会等这条命令闭口（exit 或空闲静默）再返回它的行区间输出，AI 不需要自己 `sleep`，也不需要反复轮询或重跑同一条命令。
+
+| 方式 | 实测耗时（快命令） | 说明 |
+| --- | --- | --- |
+| `xssh_exec` | 约 **0.8s** | 独立 SSH exec 通道，一次往返直接拿输出；终端可见性弱（只镜像一段回显） |
+| `xssh_write` → `xssh_read(command_id)` | 约 **1.6s** | 写入 + 等 idle 闭口（1500ms）+ 读取；命令在终端里可见、可回查台账 |
+
+差值固定约 0.8s，来自「输出静默 1.5s 才判定命令结束」：慢命令（编译、`apt`、长脚本）两者都要等命令本身跑完，差距就只剩这 0.8s；如果远端启用了 shell 集成（OSC 133），闭口是即时的，write → read 可以接近 exec 的速度。需要 `tail -f`、Vim 这类持续交互时，用 `xssh_write` 继续输入、按需 `xssh_read` 取当前输出即可。
+
+
 ## 项目定位
 
 **这是一个可以独立使用的 SSH 插件，也是给 AI 协作准备的 SSH 插件。**
@@ -159,6 +171,13 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-20 · 命令执行统一为 write → read（v0.1.4 待发布）
+- `xssh_write` 回车提交的命令返回 `commandId`；`xssh_read` 新增 `command_id` 模式：等命令闭口后返回行区间输出（默认等 15s，上限放宽到 10 分钟）
+- 工具提示词把 write → read 规定为「唯一支持的命令结果读取方式」，`xssh_exec` 定位为独立非交互通道
+- 实测耗时：`xssh_exec` 约 0.8s，write → read 约 1.6s（差在 1.5s 的 idle 闭口）
+- 终端里点击带后缀的文件名会先切到终端当前目录再打开（图片/Office 预览，文本进编辑器页签）
+- 背景图「居中」拆成「居中缩放」（contain，整图按比例放入）与「居中裁剪」（cover，按终端尺寸裁边）
 
 ### 2026-10-19 · xssh_resource 工具 + xssh_exec 台账修复（v0.1.3）
 - 新增 `xssh_resource`（第 14 个工具）：AI 可 `list` / `save` 已保存 SSH 资源（坐标、host-key 模式、分组、SOCKS5 代理）；密码/私钥/代理密码走凭据存储（与 UI 同一 ref），绝不进请求体或记录；更新时留空凭据 = 保留原值；删除刻意不暴露（操作员决策面）
