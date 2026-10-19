@@ -741,8 +741,12 @@ ${menuSelection}`;
               backgroundImage: `url(${image.dataUrl})`,
               ...placementFor(image),
               filter: Number(image.blur ?? 0) > 0 ? `blur(${Number(image.blur)}px)` : undefined,
-              // 缩放交给 background-size；transform 只做模糊补偿，避免边缘露白。
-              transform: Number(image.blur ?? 0) > 0 ? "scale(1.02)" : undefined
+              // 提升为独立合成层：模糊结果会被缓存，终端 canvas 重绘（输出、滚动、
+              // 字号变化）时合成器不必每帧重算 blur —— 多层背景 + blur 时这是主要的
+              // 掉帧来源（用户 2026-10-20 反馈刷新/缩放慢）。缩放只做模糊边缘补偿，
+              // 避免 filter 后边缘露白。
+              transform: `translateZ(0)${Number(image.blur ?? 0) > 0 ? " scale(1.02)" : ""}`,
+              willChange: Number(image.blur ?? 0) > 0 ? "filter" : undefined
             }}
           />
           <div
