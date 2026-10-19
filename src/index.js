@@ -4056,11 +4056,14 @@ export default class SshOpsService extends TypertRemoteService {
       return { ok: true, value: { ...base, text: "", truncated: false, evicted: false } };
     }
     const read = journal.read({ fromLine: found.record.startLine, toLine: found.record.endLine ?? undefined, maxBytes });
+    // line-journal.read() 返回的是 lines 数组（没有 text 字段），这里自己拼；
+    // 之前直接用 read.text 拿到 undefined，命令输出永远显示「（无输出）」。
+    const text = (read.lines ?? []).map((entry) => entry.text).join("\\n");
     return {
       ok: true,
       value: {
         ...base,
-        text: read.text,
+        text,
         truncated: read.truncated,
         evicted: read.evicted,
         firstLine: read.firstLine,
