@@ -86,8 +86,8 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.2.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.2
+tar -xzf dsh-xssh-ops-0.1.3.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3
 
 # B. 直接装 npm tarball
 dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
@@ -172,7 +172,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.3.tgz
 
 ## 更新记录（近期）
 
-### 2026-10-20 · 命令执行统一为 write → read（v0.1.4 待发布）
+### 2026-10-20 · 命令执行统一为 write → read（v0.1.3）
 - `xssh_write` 回车提交的命令返回 `commandId`；`xssh_read` 新增 `command_id` 模式：等命令闭口后返回行区间输出（默认等 15s，上限放宽到 10 分钟）
 - 工具提示词把 write → read 规定为「唯一支持的命令结果读取方式」，`xssh_exec` 定位为独立非交互通道
 - 实测耗时：`xssh_exec` 约 0.8s，write → read 约 1.6s（差在 1.5s 的 idle 闭口）
