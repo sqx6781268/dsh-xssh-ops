@@ -48,12 +48,39 @@ const GLYPHS = {
   file: "📄"
 };
 
+/**
+ * 无后缀但含义明确的文件名（用户 2026-10-20 用空后缀文件验证图标时发现）。
+ * 键一律小写；值是对应类型。加新名字只需在这里加一行。
+ */
+const NAME_KINDS = new Map([
+  // 说明类 → 文本
+  ["readme", "text"], ["license", "text"], ["licence", "text"], ["copying", "text"],
+  ["changelog", "text"], ["changes", "text"], ["news", "text"], ["authors", "text"],
+  ["contributors", "text"], ["notice", "text"], ["todo", "text"], ["install", "text"],
+  // 构建/配置类 → 代码
+  ["makefile", "code"], ["gnumakefile", "code"], ["dockerfile", "code"], ["containerfile", "code"],
+  ["jenkinsfile", "code"], ["vagrantfile", "code"], ["gemfile", "code"], ["rakefile", "code"],
+  ["procfile", "code"], ["cmakelists.txt", "code"], ["pkgbuild", "code"], ["brewfile", "code"],
+  ["justfile", "code"], ["caddyfile", "code"], ["nginx.conf", "code"],
+  // 脚本类（无后缀但通常是可执行脚本）
+  ["configure", "code"], ["bootstrap", "code"],
+  // 二进制/镜像类
+  ["vmlinuz", "binary"], ["initrd", "binary"]
+]);
+
 export function iconKindOf(name, isDirectory = false) {
   if (isDirectory) return "folder";
   const text = String(name ?? "");
   const lower = text.toLowerCase();
-  if (lower === "dockerfile" || lower === "makefile" || lower === "readme" || lower === "license") {
-    return lower === "readme" || lower === "license" ? "text" : "code";
+  const byName = NAME_KINDS.get(lower);
+  if (byName !== undefined) return byName;
+  // 点开头的是「隐藏文件名」而不是扩展名（.env / .gitignore 这类）：
+  // lastIndexOf(".") 对 `.env.example` 会取到 "example"，语义是错的。
+  if (lower.startsWith(".") && lower.indexOf(".", 1) < 0) {
+    // .gitignore / .dockerignore / .npmrc 等点文件按配置处理
+    return lower === ".gitignore" || lower === ".dockerignore" || lower === ".npmignore"
+      ? "code"
+      : lower === ".env" ? "code" : "file";
   }
   const index = lower.lastIndexOf(".");
   if (index < 0) return "file";

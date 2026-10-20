@@ -30,8 +30,10 @@ __dsh_find_shell() {
     # candidate falls into the busy branch - the root cause of exec failing with
     # 125 on zsh-login-shell hosts since 0.3.x (same fix as upstream 0.4.0).
     # read does not touch positional parameters.
+    # The LAST read variable swallows every remaining field, so give it a
+    # throwaway target: tpgid must be exactly field 8, not "8 and 40 more".
     __dsh_pgrp= __dsh_tty_nr= __dsh_tpgid=
-    read -r __dsh_state __dsh_ppid __dsh_pgrp __dsh_session __dsh_tty_nr __dsh_tpgid <<EOF
+    read -r __dsh_state __dsh_ppid __dsh_pgrp __dsh_session __dsh_tty_nr __dsh_tpgid __dsh_rest <<EOF
 $__dsh_stat
 EOF
     [ -n "$__dsh_tpgid" ] && [ "$__dsh_pgrp" = "$__dsh_tpgid" ] && [ "$__dsh_tty_nr" != 0 ] || {
