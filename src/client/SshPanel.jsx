@@ -33,6 +33,7 @@ import { ResourceEditor } from "./SshResources.jsx";
 import { insertIntoComposer } from "./chat-bridge.js";
 import { matchesShortcut } from "./shortcut-actions.js";
 import { createTerminalPool } from "./terminal-pool.js";
+import { expandHome, parsePromptCwd as parsePromptPath } from "./prompt-cwd.js";
 import { applyTerminalTheme, createTerminalThemeWatcher, getTerminalTheme } from "./terminal-theme.js";
 import {
   DEFAULT_VIEW_ID,
@@ -314,14 +315,24 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     // React state 的旧值（提示符解析与链接点击可能同帧发生）。
     const currentCwdRef = { current: null };
     const onCwdChangeRef = { current: onCwdChange };
+    // 远端 home：`~` 不能硬编码成 /root（非 root 用户、home 不在 /root 的机器会全错）。
+    // 连上后取一次并缓存；取不到就宁可不跳，也不拼一个错的路径。
+    const homeRef = { current: null };
+    let homePending = false;
+    const ensureHome = () => {
+      if (homeRef.current !== null || homePending) return;
+      homePending = true;
+      void api.sftpHome(connectionId)
+        .then((value) => { if (value && typeof value.home === "string") homeRef.current = value.home; })
+        .catch(() => { /* 忽略：下次解析会重试 */ })
+        .finally(() => { homePending = false; });
+    };
     const parsePromptCwd = (text) => {
-      const match = /(?:^|[\r\n])[^\r\n]*?@[^\s:]+:([^\r\n#$]*)[#$]\s*$/.exec(text);
-      if (!match) return null;
-      let value = match[1].trim();
-      if (value === "") return null;
-      if (value === "~") value = "/root";
-      else if (value.startsWith("~/")) value = `/root${value.slice(1)}`;
-      return value.startsWith("/") ? value : null;
+      const parsed = parsePromptPath(text);
+      if (parsed === null) return null;
+      if (parsed.startsWith("/")) return parsed;
+      ensureHome();
+      return expandHome(parsed, homeRef.current);
     };
     const owner = { sessionId };
     const entry = terminalPool.acquire(sessionId, owner);

@@ -4286,6 +4286,32 @@ export default class SshOpsService extends TypertRemoteService {
   }
 
   /** Stat one remote path. */
+  /**
+   * 远端登录用户的 home 目录（用户 2026-10-20）。
+   * 提示符里的 `~` 不能硬编码成 `/root`（非 root 用户、或 home 不在 /root 的机器会全错），
+   * 由 SFTP 的 realpath(".") 给出真实 home（sftp 会话默认就在 home 下）。
+   */
+  async sftpHome(request = {}) {
+    const selected = this.resolveConnection(request.connectionId);
+    if (!selected.ok) return selected;
+    const sftp = await this.requireSftp(selected.connection);
+    if (!sftp.ok) return sftp;
+    try {
+      const home = await new Promise((resolve, reject) => {
+        sftp.sftp.realpath(".", (error, resolved) => {
+          if (error) reject(error);
+          else resolve(resolved);
+        });
+      });
+      if (typeof home !== "string" || !home.startsWith("/")) {
+        return { ok: false, error: fail("sftp-home-failed", `unexpected home path: ${String(home)}`) };
+      }
+      return { ok: true, value: { home } };
+    } catch (error) {
+      return { ok: false, error: fail("sftp-home-failed", error.message) };
+    }
+  }
+
   async sftpStat(request) {
     const selected = this.resolveConnection(request.connectionId);
     if (!selected.ok) return selected;

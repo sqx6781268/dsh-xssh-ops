@@ -73,6 +73,7 @@ export const DESCRIPTORS = [
   def("closeSession", S.closeSessionRequestSchema, "SshCloseSessionRequest", S.closeSessionResultSchema, "SshCloseSessionResult"),
   def("disconnect", S.disconnectRequestSchema, "SshDisconnectRequest", S.disconnectResultSchema, "SshDisconnectResult"),
   def("sftpList", S.sftpListRequestSchema, "SftpListRequest", S.sftpListResultSchema, "SftpListResult"),
+  def("sftpHome", S.sftpHomeRequestSchema, "SftpHomeRequest", S.sftpHomeResultSchema, "SftpHomeResult"),
   def("sftpStat", S.sftpStatRequestSchema, "SftpStatRequest", S.sftpStatResultSchema, "SftpStatResult"),
   def("sftpReadFile", S.sftpReadRequestSchema, "SftpReadRequest", S.sftpReadResultSchema, "SftpReadResult"),
   def("sftpWriteFile", S.sftpWriteRequestSchema, "SftpWriteRequest", S.sftpWriteResultSchema, "SftpWriteResult"),

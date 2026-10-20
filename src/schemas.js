@@ -554,6 +554,12 @@ export const sftpListResultSchema = resultSchema(
   z.object({ path: z.string(), entries: z.array(sftpEntrySchema) })
 );
 
+export const sftpHomeRequestSchema = z.object({
+  connectionId: z.string().optional()
+});
+
+export const sftpHomeResultSchema = resultSchema(z.object({ home: z.string() }));
+
 export const sftpStatRequestSchema = z.object({
   connectionId: z.string().optional(),
   path: z.string().min(1)
