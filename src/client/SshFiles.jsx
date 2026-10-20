@@ -154,7 +154,9 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     });
   };
   const openPreview = async (entry) => {
-    const targetPath = joinPath(cwd, entry.name);
+    // 用 cwdRef（load 同步更新）而不是 cwd state：刚切目录后 state 还是旧值，
+    // 会把路径拼成「/文件名」这种缺目录的形式（用户 2026-10-20 实测）。
+    const targetPath = joinPath(cwdRef.current, entry.name);
     setPreview({ name: entry.name, path: targetPath, size: entry.size, status: "loading", scale: 1, url: null });
     try {
       const value = await api.sftpReadFile(connectionId, targetPath, 16 * 1024 * 1024);
@@ -203,7 +205,7 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   }, [viewer?.status, viewer?.url]);
 
   const openViewer = async (entry) => {
-    const targetPath = joinPath(cwd, entry.name);
+    const targetPath = joinPath(cwdRef.current, entry.name);
     setViewer({ name: entry.name, path: targetPath, status: "loading", url: null });
     try {
       const value = await api.sftpReadFile(connectionId, targetPath, 16 * 1024 * 1024);
@@ -224,7 +226,7 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   };
 
   const openEntry = (entry) => {
-    if (entry.isDirectory) load(joinPath(cwd, entry.name));
+    if (entry.isDirectory) load(joinPath(cwdRef.current, entry.name));
   };
 
   const download = async (entry) => {
@@ -571,7 +573,8 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
 
   /** Read one remote file into the text editor, refusing binaries and big files. */
   const openEditor = async (entry) => {
-    const path = joinPath(cwd, entry.name);
+    // 同 openPreview/openViewer：刚切目录后 cwd state 尚未刷新，必须用同步的 cwdRef。
+    const path = joinPath(cwdRef.current, entry.name);
     // 文件页签的编辑动作统一跳转到「编辑器」页签执行（用户 2026-10-19）。
     if (typeof onEditFile === "function") {
       onEditFile(path);
