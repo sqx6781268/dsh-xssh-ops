@@ -642,15 +642,20 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     void load(followPath);
   }, [followPath]);
 
-  // 终端里点击文件名后：先切到终端当时的目录，再在目录里找它；
-  // 图片/Office 走预览，其余走编辑器页签（用户 2026-10-20）。
+  // 终端里点击文件名后打开（用户 2026-10-20）：
+  // 优先用终端给出的**绝对路径**（path）——先切到它的父目录再按名字取条目，
+  // 这样即使文件页签当前目录与终端不一致也不会报「某某目录无此文件」；
+  // 没有绝对路径时退回「先切到 cwd 再找名字」的旧行为。
   useEffect(() => {
     if (!pendingFile) return;
-    const { name, cwd: targetCwd } = pendingFile;
+    const { name, path: absolutePath, cwd: targetCwd } = pendingFile;
     onPendingConsumed?.();
     void (async () => {
-      if (targetCwd && targetCwd !== cwdRef.current) {
-        await load(targetCwd);
+      const directory = typeof absolutePath === "string" && absolutePath.startsWith("/")
+        ? dirnameOf(absolutePath)
+        : targetCwd;
+      if (directory && directory !== cwdRef.current) {
+        await load(directory);
       }
       const entry = (entriesRef.current ?? []).find((item) => item.name === name);
       if (!entry) {

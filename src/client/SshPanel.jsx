@@ -310,6 +310,9 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     if (!container) return undefined;
     // 提示符 cwd 解析（用户 2026-10-19/20）：`user@host:/path# ` 或 `~`。
     // 定义在挂载之前，首次重放（池复用）时也能解析一次当前目录。
+    // 当前目录的最新值（同步 ref）：文件链接解析绝对路径时用，避免读到
+    // React state 的旧值（提示符解析与链接点击可能同帧发生）。
+    const currentCwdRef = { current: null };
     const onCwdChangeRef = { current: onCwdChange };
     const parsePromptCwd = (text) => {
       const match = /(?:^|[\r\n])[^\r\n]*?@[^\s:]+:([^\r\n#$]*)[#$]\s*$/.exec(text);
@@ -365,7 +368,7 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       const buffer = term.buffer.active;
       const line = buffer.getLine(buffer.baseY + buffer.cursorY);
       const cwd = parsePromptCwd(line?.translateToString(true) ?? "");
-      if (cwd !== null) onCwdChangeRef.current?.(cwd);
+      if (cwd !== null) { currentCwdRef.current = cwd; onCwdChangeRef.current?.(cwd); }
     } catch { /* 忽略 */ }
 
     let alive = true;
@@ -508,6 +511,7 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
 
     // 文件链接（用户 2026-10-19）：ls 输出里带已知后缀的文件名加下划线，
     // 点击后交给文件页签打开预览/编辑器。与 URL 链接互不影响。
+    // currentCwdRef 供链接解析拼绝对路径（提示符解析是异步到达的，用 ref 取最新值）。
     let fileLinkDisposable = null;
     if (fileLinksEnabled && typeof term.registerLinkProvider === "function") {
       const FILE_PATTERN = /([^\s/|<>":]+?\.(?:png|jpe?g|gif|webp|svg|bmp|ico|avif|tiff|mp4|mkv|avi|mov|wmv|flv|webm|m4v|mp3|wav|flac|aac|ogg|m4a|opus|pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|zip|rar|7z|tar|tgz|gz|bz2|xz|txt|nfo|md|markdown|sh|bash|zsh|py|js|mjs|ts|tsx|jsx|json|ya?ml|xml|html?|css|scss|less|log|csv|tsv|conf|ini|cfg|toml|env|sql|go|java|c|h|cpp|rs|rb|php|db|sqlite|bin|exe|so|dll|ttf|otf|woff2?))/gi;
@@ -522,11 +526,22 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
           while ((match = FILE_PATTERN.exec(text)) !== null) {
             const name = match[1];
             const start = match.index + 1;
+            // 绝对路径（用户 2026-10-20）：终端里点文件名时，把「当前目录 + 文件名」
+            // 拼成绝对路径传给文件页签，避免文件页签目录与终端不同步时报
+            // 「某某目录无此文件」。链接本身可能是绝对路径（/root/x.png）或
+            // 相对路径（./x.png、sub/x.png），三种都归一化。
+            const absolutePath = (() => {
+              const cwd = currentCwdRef.current;
+              if (name.startsWith("/")) return name;
+              if (!cwd) return null;
+              const cleaned = name.replace(/^\.\//, "");
+              return `${cwd === "/" ? "" : cwd}/${cleaned}`;
+            })();
             links.push({
               range: { start: { x: start, y }, end: { x: start + name.length - 1, y } },
               text: name,
               decorations: { underline: true, pointerCursor: true },
-              activate: () => onOpenFileToken?.(name)
+              activate: () => onOpenFileToken?.(name, absolutePath)
             });
           }
           callback(links.length > 0 ? links : undefined);
@@ -565,7 +580,7 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
       if (fresh) {
         term.write(fresh);
         const cwd = parsePromptCwd(fresh);
-        if (cwd !== null) onCwdChangeRef.current?.(cwd);
+        if (cwd !== null) { currentCwdRef.current = cwd; onCwdChangeRef.current?.(cwd); }
       }
       if (exit !== null) {
         markClosed();
@@ -2206,7 +2221,7 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
                         fileLinksEnabled={terminalFileLinks && filesFollowTerminal}
                         wheelZoom={wheelZoomEnabled}
                         onCwdChange={setTerminalCwd}
-                        onOpenFileToken={(name) => { setTab("files"); setPendingFile({ name, cwd: terminalCwd }); }}
+                        onOpenFileToken={(name, absolutePath) => { setTab("files"); setPendingFile({ name, path: absolutePath, cwd: terminalCwd }); }}
                         lightTheme={lightTheme}
                         onInsertDraft={(text) => setDraftInsert({ text, nonce: Date.now() })}
                         onReady={(sid, termApi) => {
