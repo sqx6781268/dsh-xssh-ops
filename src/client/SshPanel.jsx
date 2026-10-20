@@ -531,8 +531,18 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
             // 「某某目录无此文件」。链接本身可能是绝对路径（/root/x.png）或
             // 相对路径（./x.png、sub/x.png），三种都归一化。
             const absolutePath = (() => {
-              const cwd = currentCwdRef.current;
               if (name.startsWith("/")) return name;
+              // cwd 可能还没解析到（首次连上后没有新数据到达时 currentCwdRef 仍是 null），
+              // 点击这一刻再从缓冲区光标行解析一次，避免把「未知」当成「根目录」。
+              let cwd = currentCwdRef.current;
+              if (!cwd) {
+                try {
+                  const buffer = term.buffer.active;
+                  const cursorLine = buffer.getLine(buffer.baseY + buffer.cursorY);
+                  const parsed = parsePromptCwd(cursorLine?.translateToString(true) ?? "");
+                  if (parsed !== null) { currentCwdRef.current = parsed; cwd = parsed; }
+                } catch { /* 忽略：拿不到就退化为按名字搜索 */ }
+              }
               if (!cwd) return null;
               const cleaned = name.replace(/^\.\//, "");
               return `${cwd === "/" ? "" : cwd}/${cleaned}`;

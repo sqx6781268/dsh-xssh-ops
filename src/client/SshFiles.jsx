@@ -653,13 +653,16 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     const { name, path: absolutePath, cwd: targetCwd } = pendingFile;
     onPendingConsumed?.();
     void (async () => {
-      // 候选目录：绝对路径的父目录优先，其次终端 cwd，最后当前目录。
+      // 候选目录：绝对路径的父目录优先，其次终端 cwd、当前目录，最后几个常见位置
+      // （连上服务器后 cwd 尚未解析时，文件多半在 /root 或 /）。
       const candidates = [];
       if (typeof absolutePath === "string" && absolutePath.startsWith("/")) candidates.push(dirnameOf(absolutePath));
-      if (targetCwd && !candidates.includes(targetCwd)) candidates.push(targetCwd);
-      if (!candidates.includes(cwdRef.current)) candidates.push(cwdRef.current);
+      if (targetCwd) candidates.push(targetCwd);
+      candidates.push(cwdRef.current, "/root", "/");
+      const uniqueCandidates = [...new Set(candidates.filter((dir) => typeof dir === "string" && dir.startsWith("/")))];
 
-      for (const directory of candidates) {
+      setError(null);
+      for (const directory of uniqueCandidates) {
         // 绝对路径可用时先 stat：避免为了一个不存在的猜测目录白跑一次 list。
         if (typeof absolutePath === "string" && absolutePath.startsWith("/")) {
           try {
@@ -667,7 +670,7 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
             if (stat === undefined || stat === null) continue;
           } catch { continue; }
         }
-        if (directory !== cwdRef.current) await load(directory);
+        await load(directory);
         const entry = (entriesRef.current ?? []).find((item) => item.name === name);
         if (!entry) continue;
         if (entry.isDirectory) openEntry(entry);
@@ -676,7 +679,7 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
         else void openEditor(entry);
         return;
       }
-      setError(t(`没找到 ${name}（已尝试：${candidates.join(", ")}）`));
+      setError(t(`没找到 ${name}（已尝试：${uniqueCandidates.join(", ")}）`));
     })();
   }, [pendingFile]);
 
