@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.5 - 2026-10-20
+
+- **修复（根因）：终端提示符 cwd 解析被 OSC 控制序列污染，`~` 又被硬编码成 `/root`**。用户报的「点击文件名总是提示某某目录无此文件」有两个**普遍性**缺陷，不是某个环境的问题：
+  - **OSC 窗口标题会吃进路径**：多数 shell（zsh 默认、多数发行版 bash 配置）在提示符前写 `ESC ] 0 ; user@host:~/path BEL`。旧实现直接在原始行文本上跑正则，先命中标题里的 `@host:`，把 `~/path` 连同后面的真提示符一起吃进捕获组，得到 `~/path user@host:~/path` 这种脏路径（报错信息里「已尝试」列表本身就是证据）。
+  - **`~` 展开写死 `/root`**：非 root 用户、或 home 不在 `/root` 的机器全部解析错误。
+  - 修法：解析逻辑抽成独立模块 `src/client/prompt-cwd.js`——先剥离 OSC（BEL / ST 两种终止符）、CSI 色码与其他 ESC 序列，只取**最后一个**提示符行，路径含空白 / `#` / `$` / `@` / 控制字符一律拒绝（fail-closed：宁可不跳转，也不跳到一个错路径）；`~` 不再猜测，由新增的 **`sftpHome` RPC**（SFTP `realpath('.')`）取真实 home 后展开，取不到就让本次跳转失败而不是拼假路径。
+  - 测试 `test/prompt-cwd.mjs`：控制序列剥离（含两种 OSC 终止符）、多种提示符形态、脏输入 fail-closed 矩阵、home 展开（含 home 恰为 `/` 的边界——这条还抓出过 `~` 展成空串的真 bug）。`sftpHome` 的 wire 契约同步进 `schemas.js` / `descriptors.js` / `typert.js`，`typert-sync` 守卫三处一致。
+- **修复：终端里点击文件名跳转**（串联修掉四层）。① 链接现在把**绝对路径**一并传给文件页签，不再只传裸文件名；② 文件页签按 `sftpStat` **验证路径真实存在**再切目录，避免为猜错的目录白跑一次列目录；③ 解析不出绝对路径时按「路径父目录 → 终端 cwd → 当前目录 → `/root` → `/`」依次尝试，全部失败才报错并列出尝试过的路径；④ `openPreview` / `openViewer` / `openEditor` / `openEntry` 改用**同步的 `cwdRef`** 拼远端路径——`load()` 里的 `setCwd` 是异步的，刚切完目录就用 `cwd` state 会拼出缺目录的 `/文件名`（实测预览报 `/电子营业执照.doc: No such file`）。
+- **修复：`xssh_exec` 在所有环境永久失败**。`/proc/*/stat` 解析改用 `read -r` 之后，**最后一个变量会吞掉剩余全部字段**，于是 `tpgid` 变成 `"8 4194304 480 …"`，与 `pgrp` 永不相等，每个候选都落进 busy 分支并报 `interactive shell is busy or non-interactive` 加一大串字段。加一个丢弃变量 `__dsh_rest` 修复。
+- **修复：无后缀与点开头文件的图标**。`iconKindOf` 此前只特判 4 个名字，`CHANGELOG` / `PKGBUILD` / `Vagrantfile` / `CMakeLists.txt` 这类会回落到普通文件图标；点开头的文件又会被当成扩展名（`.env.example` 解析成 `example`）。现在有 `NAME_KINDS` 名称表，并规定「开头的点不是扩展名」。`test/file-icons.mjs` 覆盖名称表、点文件、无后缀回落与扩展名映射。
+- **新增：字体菜单直接设置字号**。菜单里新增「字号」行：显示当前字号、`−` / `+` 按钮、可直接输入 8–28 的数字框。
+- **新增：`Ctrl + 滚轮`（触控板捏合同效）缩放字号**，累积判步避免捏合连发跳档；设置 → 连接设置 → ⑤ 输出与日志 新增「Ctrl+滚轮缩放字号」开关（默认开）。
+- **性能：字号调整路径逐项拆解优化**（为定位「点一下卡 3 秒」）：只赋真正变化的 option（`fontFamily` 未变时不再触发第二次完整重排）、字号调整不再更新面板 state（此前一次点击会重渲染整个面板含 Monaco）、`fit()` 与设置保存合并防抖、移除终端容器上的 `contain: layout paint`（实测反而使该操作从 247ms 恶化到 3858ms）。新增排障钩子：`localStorage['xssh-ops:debug']='1'` 时暴露 `window.__xsshTerm`，可在 Console 里直接对 xterm 分段计时。
+  - **最终定位为外部原因**：`@linxin666/dsh-web-all` 的 compat 样式表用 `html:has([data-dsh-frame])` 做根视口锁，`:has()` 会对每个发生样式失效的节点求值整条祖先链，成本随页面总节点数增长；xterm 改字号时重建行元素，于是被拖成秒级卡顿。实测「装聚合包 1754ms / 不装 116ms」。我们按 README 的排查条目复现并定位、上报上游，作者已在 PR #1916 改成属性选择器修复。**本插件的终端回滚缓冲因此恢复为 5000 行**（当初降到 500 是为了绕开这个外部问题）。
+  - README「常见问题」新增**置顶性能排查条目**：判定脚本、>500ms 与 40–150ms 的判据、卸载聚合包的正确姿势，以及两个坑（客户端 bundle 按 `node_modules` 是否**存在该包目录**加载，只改 `dsh.profile.bundles` 不够；`cordis.patch.yml` 里的 `dsh-web-all/xxx` 子路径引用要改写成独立子包名）。
+- **文档**：README 常见问题补性能排查；`智能体指南.md` 增补「性能问题先做插件级对照」与「终端文本解析必须先剥离控制序列」两条铁律。
+
 ## 0.1.4 - 2026-10-20
 
 - **安全：`git clean` 拦截漏洞**（上游 0.3.22 同类）：deny-list 正则尾部 `\b` 使 `-[a-z]*f` 在 `-fd`/`-df` 这类组合旗标上失效，最常用的 `git clean -fd` 与 `git clean --force` 自上线起从未被拦截。现在匹配「任意含 f 的短旗组」与 `--force`，干跑/交互模式（`-n`/`-i`）不误拦；`test/safety.mjs` 补拦截矩阵。

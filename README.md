@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.4-blue)
+![version](https://img.shields.io/badge/version-0.1.5-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.4.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.4
+tar -xzf dsh-xssh-ops-0.1.5.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.5
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.4.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.5.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -171,6 +171,16 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.4.tgz
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-20 · v0.1.5 —— 终端提示符解析根因修复 + 字号交互
+- **修复根因**：终端提示符 cwd 解析此前直接在原始行文本上匹配，会被 OSC 窗口标题序列污染（zsh 默认、多数 bash 配置都会写 `ESC ] 0 ; user@host:~/path BEL`），解析出 `~/path user@host:~/path` 这种脏路径，于是点文件名时总在错误目录里找；`~` 又被硬编码成 `/root`，非 root 用户全错。现在独立成 `prompt-cwd.js`：先剥离 OSC/CSI/ESC 序列、只取最后一个提示符、脏输入一律拒绝，`~` 由新增 `sftpHome`（SFTP `realpath('.')`）取真实 home 展开
+- **修复**：终端点文件名跳转（绝对路径 + `sftpStat` 验证 + 候选目录依次尝试 + 用同步 `cwdRef` 拼路径，不再拼出缺目录的 `/文件名`）
+- **修复**：`xssh_exec` 在 `read -r` 改造后因最后一个变量吞掉剩余字段而永久报 busy
+- **修复**：无后缀知名文件（CHANGELOG/PKGBUILD/Vagrantfile…）与点开头文件的图标
+- **新增**：字体菜单里直接显示与输入字号；`Ctrl + 滚轮`（捏合同效）缩放字号，设置页有开关
+- **性能**：字号调整只赋变化项、不再重渲染整个面板、fit 与保存防抖；移除终端容器上的 `contain: layout paint`（实测反而慢 15 倍）
+- **外部根因**：卡顿最终定位到 `@linxin666/dsh-web-all` 的 `:has()` 根视口锁（实测 1754ms vs 116ms），已上报并获上游修复（PR #1916）；终端回滚缓冲因此恢复 5000 行
+- 文档：README 常见问题新增置顶性能排查条目（判定脚本 + 阈值 + 卸载注意事项）
 
 ### 2026-10-20 · v0.1.4 —— 从上游 0.3.21–0.4.0 融合的安全与体验加固
 - **安全**：修复 `git clean -fd` / `--force` 从未命中 deny-list 的漏洞（此前只有 `-f`/`-df` 能拦）；`test/safety.mjs` 补拦截矩阵

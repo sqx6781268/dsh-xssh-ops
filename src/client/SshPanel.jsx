@@ -139,10 +139,10 @@ const terminalPool = createTerminalPool({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      // 500 行：xterm 改字号会重排整个 scrollback，成本随行数线性增长
-      // （2000 行≈1.3s、5000 行≈2.0s，用户 2026-10-20 实测）；完整历史仍在
-      // 「日志」页签的会话录制里，终端只保留最近 500 行用于回看。
-      scrollback: 500,
+      // 保留 5000 行回滚历史（用户 2026-10-20 确认的既定值）。曾经为了绕开
+      // 「改字号卡 3 秒」把它降到 500，但根因最终定位到外部插件（@linxin666/dsh-web-all
+      // 的 `:has()` 根视口锁），与本插件无关，故恢复原值。
+      scrollback: 5000,
       // The search addon's match HIGHLIGHTS are gated behind this flag; the
       // search itself still works, but without it every find throws
       // "proposed API" and the reader sees no matches at all.
