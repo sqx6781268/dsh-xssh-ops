@@ -251,6 +251,38 @@ node scripts/i18n-extract.mjs   # 中英词条覆盖检查
 **文件页签不会跟着 cd 切换**
 确认「文件页签跟随终端路径」已开启，且终端提示符是常见形式（`user@host:/path# ` 或 `~`）；自定义提示符需要告诉我实际格式再补解析规则。
 
+**终端卡顿 / 调字号或切换会话时明显掉帧（先排查这一条）**
+
+已知最常见的外部原因是 `@linxin666/dsh-web-all` 这个聚合包：它在 `lib/client.js` 里对 `document.body` 挂了全局 `MutationObserver({ childList: true, subtree: true })`，而 xterm.js 改字号会重建大量内部 DOM，一次改动产生数百到数千条 mutation record 全部进它的回调队列。实测单次 `term.options.fontSize` 赋值从 **45 ms 恶化到 1750 ms**（约 15–40 倍），表现为点一下 +/- 卡 1–3 秒。
+
+**判定方法**：在页面 Console 执行下面这段（本插件在 `localStorage['xssh-ops:debug']='1'` 时会暴露当前终端实例；也可以换成任意 xterm 实例）：
+
+```js
+localStorage.setItem("xssh-ops:debug", "1");   // 刷新后生效
+const t = window.__xsshTerm;
+const t0 = performance.now();
+t.options.fontSize = t.options.fontSize + 1;
+console.log(performance.now() - t0, "ms");
+```
+
+- **> 500 ms** → 基本可以确定是这个全局 observer（或同类「监听整页 DOM」的插件）在拖慢；
+- **40–150 ms** → 正常，属于 xterm 自身的重排成本。
+
+**规避**：卸载聚合包，按需单独安装子包（功能不丢，只是变成独立包）：
+
+```powershell
+dsh plugin --profile <你的profile> remove @linxin666/dsh-web-all
+# 按需单独装，例如：
+dsh plugin --profile <你的profile> add @linxin666/dsh-client-ui-task-board
+dsh plugin --profile <你的profile> add @linxin666/dsh-client-ui-git-graph
+```
+
+注意两个坑：
+1. **只改 `dsh.profile.bundles` 不够**——客户端 bundle 是否加载取决于 `node_modules` 里**是否存在该包目录**，必须真的删掉/移走包目录；
+2. 卸载后检查 profile 的 `cordis.patch.yml`，如果有 `name: "@linxin666/dsh-web-all/xxx"` 这类**子路径引用**，要改成对应的独立子包名（如 `@linxin666/dsh-session-archive`），否则该条目加载失败。
+
+实测对照：同一台机器、同一浏览器、同一个 34 行终端，装聚合包 **1754 ms** → 卸载后 **150 ms**。上游反馈：<https://github.com/zhu1090093659/dsh-web/issues/1913>。
+
 **改了设置或代码不生效**
 DSH 桌面版会缓存插件代码，需要完全退出再打开；本地 link 安装时还要先 `npm run build`。
 
