@@ -643,29 +643,40 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   }, [followPath]);
 
   // 终端里点击文件名后打开（用户 2026-10-20）：
-  // 优先用终端给出的**绝对路径**（path）——先切到它的父目录再按名字取条目，
-  // 这样即使文件页签当前目录与终端不一致也不会报「某某目录无此文件」；
-  // 没有绝对路径时退回「先切到 cwd 再找名字」的旧行为。
+  // 直接按**绝对路径**定位，不再依赖终端提示符解析出的 cwd —— 用 xssh_write
+  // 跑命令时提示符不会真实刷新，cwd 可能是上一次 cd 留下的旧值，于是会报
+  // 「当前目录（旧目录）里没有 该文件」。
+  // 做法：先 stat 绝对路径确认存在，再切到它的父目录打开；绝对路径不可用
+  // （拿不到 cwd 拼路径）时才退回旧的「切到 cwd 找名字」行为。
   useEffect(() => {
     if (!pendingFile) return;
     const { name, path: absolutePath, cwd: targetCwd } = pendingFile;
     onPendingConsumed?.();
     void (async () => {
-      const directory = typeof absolutePath === "string" && absolutePath.startsWith("/")
-        ? dirnameOf(absolutePath)
-        : targetCwd;
-      if (directory && directory !== cwdRef.current) {
-        await load(directory);
-      }
-      const entry = (entriesRef.current ?? []).find((item) => item.name === name);
-      if (!entry) {
-        setError(t(`当前目录（${cwdRef.current}）里没有 ${name}`));
+      // 候选目录：绝对路径的父目录优先，其次终端 cwd，最后当前目录。
+      const candidates = [];
+      if (typeof absolutePath === "string" && absolutePath.startsWith("/")) candidates.push(dirnameOf(absolutePath));
+      if (targetCwd && !candidates.includes(targetCwd)) candidates.push(targetCwd);
+      if (!candidates.includes(cwdRef.current)) candidates.push(cwdRef.current);
+
+      for (const directory of candidates) {
+        // 绝对路径可用时先 stat：避免为了一个不存在的猜测目录白跑一次 list。
+        if (typeof absolutePath === "string" && absolutePath.startsWith("/")) {
+          try {
+            const stat = await api.sftpStat(connectionId, absolutePath);
+            if (stat === undefined || stat === null) continue;
+          } catch { continue; }
+        }
+        if (directory !== cwdRef.current) await load(directory);
+        const entry = (entriesRef.current ?? []).find((item) => item.name === name);
+        if (!entry) continue;
+        if (entry.isDirectory) openEntry(entry);
+        else if (isImageName(entry.name)) void openPreview(entry);
+        else if (isFileViewerName(entry.name)) void openViewer(entry);
+        else void openEditor(entry);
         return;
       }
-      if (entry.isDirectory) openEntry(entry);
-      else if (isImageName(entry.name)) void openPreview(entry);
-      else if (isFileViewerName(entry.name)) void openViewer(entry);
-      else void openEditor(entry);
+      setError(t(`没找到 ${name}（已尝试：${candidates.join(", ")}）`));
     })();
   }, [pendingFile]);
 

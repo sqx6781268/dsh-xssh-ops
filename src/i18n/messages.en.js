@@ -1157,4 +1157,5 @@ export const en = {
   "Ctrl+滚轮缩放字号": "Ctrl+wheel font zoom",
   "开启后，在终端里按住 Ctrl 滚动滚轮（触控板捏合同效）可调整字号 8–28；也可以在终端右上角的字体菜单里直接输入字号。": "When enabled, Ctrl+wheel (or trackpad pinch) in the terminal changes the font size between 8 and 28; the font menu at the terminal top-right also accepts a size directly.",
   "字号": "Font size",
+  "没找到 ${name}（已尝试：${candidates.join(\", \")}）": "Could not find ${name} (tried: ${candidates.join(\", \")})",
 };
