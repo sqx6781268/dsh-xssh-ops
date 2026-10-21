@@ -2,7 +2,7 @@
   "name": "dsh-xssh-ops",
   "description": "XSSH ops for DSH Web UI: connect to servers over SSH (terminal / SFTP / tunnels), edit commands locally, correlate every command with its output line range, and run background jobs whose results land in remote temp files. Host half manages sessions with ssh2; client half renders the terminal, the line-number view and the command ledger.",
   "icon": "./icon.svg",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "license": "MIT",
   "repository": {
     "type": "git",

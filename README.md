@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.5-blue)
+![version](https://img.shields.io/badge/version-0.1.6-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.5.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.5
+tar -xzf dsh-xssh-ops-0.1.6.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.6
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.5.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.6.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -171,6 +171,14 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.5.tgz
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-22 · v0.1.6 —— 文件页签可编辑路径框 + 多终端点文件定位
+- **新增**：文件页签顶部路径改为**可编辑输入框**，输入路径回车直达（支持 `/绝对路径`、`~`、`~/子目录`、相对路径；`Esc` 还原）
+- **修复根因**：第二个终端里点文件名打不开——`terminalCwd` 是面板级单一状态，多终端互相覆盖（点文件用的是别的终端的目录）；改为按 `sessionId` 分开存，链接点击时带上该终端自己的 cwd
+- **不再猜固定路径**：删掉 `/root`、`/` 兜底，改为新增 RPC `sessionCwd`——读 `/proc/<shell>/cwd` 取该会话交互 shell 的**真实**目录（与 `xssh_exec` 同一套机制，探测命令 `:`，不改目录不写终端）
+- **修复**：`~` 的 home 改为连上即预取（原先惰性取值，第一次解析 `~/x` 时 home 还是 null，绝对路径直接丢失）
+- **修复**：面板整块白屏——`terminalCwd` 在 `activeSessionId` 之前派生导致 TDZ 崩溃
+- 已实测：同时开两个终端，在第二个终端（CentOS 风格提示符 `[root@1-0001 dir]#`）点 `b.doc`，文件页签自动切到 `/tmp/xssh_icontest` 并正确列出文件
 
 ### 2026-10-20 · v0.1.5 —— 终端提示符解析根因修复 + 字号交互
 - **修复根因**：终端提示符 cwd 解析此前直接在原始行文本上匹配，会被 OSC 窗口标题序列污染（zsh 默认、多数 bash 配置都会写 `ESC ] 0 ; user@host:~/path BEL`），解析出 `~/path user@host:~/path` 这种脏路径，于是点文件名时总在错误目录里找；`~` 又被硬编码成 `/root`，非 root 用户全错。现在独立成 `prompt-cwd.js`：先剥离 OSC/CSI/ESC 序列、只取最后一个提示符、脏输入一律拒绝，`~` 由新增 `sftpHome`（SFTP `realpath('.')`）取真实 home 展开
