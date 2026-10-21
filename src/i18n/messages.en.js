@@ -1158,4 +1158,11 @@ export const en = {
   "开启后，在终端里按住 Ctrl 滚动滚轮（触控板捏合同效）可调整字号 8–28；也可以在终端右上角的字体菜单里直接输入字号。": "When enabled, Ctrl+wheel (or trackpad pinch) in the terminal changes the font size between 8 and 28; the font menu at the terminal top-right also accepts a size directly.",
   "字号": "Font size",
   "没找到 ${name}（已尝试：${candidates.join(\", \")}）": "Could not find ${name} (tried: ${candidates.join(\", \")})",
+  "输入路径后回车，支持 ~ 与相对路径": "Type a path and press Enter; ~ and relative paths are supported",
+  "可直接输入路径抵达目录：支持 /绝对路径、~ 或 ~/子目录、以及相对当前目录的路径": "Type a path to jump to a directory: absolute paths, ~ or ~/subdir, and paths relative to the current directory",
+  "当前目录（可编辑）": "Current directory (editable)",
+  "没找到 ${name}（该文件不在终端当前目录 ${shown} 中）": "Could not find ${name} (it is not in the terminal's current directory ${shown})",
+  "会话不存在或已断开": "The session does not exist or has disconnected",
+  "无法确认此 shell 的当前目录": "Could not determine this shell's current directory",
+  "未确认空闲交互 shell，无法取得当前目录": "No idle interactive shell was confirmed, so the current directory is unavailable",
 };

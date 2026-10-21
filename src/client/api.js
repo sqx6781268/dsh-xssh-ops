@@ -241,6 +241,10 @@ export class SshApi {
     return this.call("sftpList", { connectionId, path });
   }
 
+  sessionCwd(sessionId) {
+    return this.call("sessionCwd", { sessionId });
+  }
+
   sftpHome(connectionId) {
     return this.call("sftpHome", { connectionId });
   }

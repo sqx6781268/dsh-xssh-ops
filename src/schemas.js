@@ -489,6 +489,12 @@ export const terminalStreamRequestSchema = z.object({
   after: z.number().int().nonnegative().safe().optional()
 });
 
+export const sessionCwdRequestSchema = z.object({
+  sessionId: z.string().min(1)
+});
+
+export const sessionCwdResultSchema = resultSchema(z.object({ cwd: z.string() }));
+
 export const changeDirectoryRequestSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1).max(4096).refine((path) => path.startsWith("/") && !/[\x00-\x1f\x7f]/.test(path))

@@ -44,6 +44,11 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   const [scpUploadPath, setScpUploadPath] = useState("");
   const [scpDownloadPath, setScpDownloadPath] = useState("");
   const [filter, setFilter] = useState("");
+  // 可编辑路径框（用户 2026-10-21）：草稿与真实 cwd 分离，输入时不打扰目录加载。
+  const [pathDraft, setPathDraft] = useState("/");
+  const [pathFocused, setPathFocused] = useState(false);
+  // 远端 home（`~` 展开用）：文件页签自己也要用，和终端侧各自缓存一份。
+  const homeRef = React.useRef(null);
   const [favorites, setFavorites] = useState([]);
   const [favoritesStorageKey, setFavoritesStorageKey] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -637,6 +642,52 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     }
   };
 
+  // cwd 变了就同步草稿；正在输入（聚焦）时不覆盖，否则会把用户打的字吃掉。
+  useEffect(() => {
+    if (!pathFocused) setPathDraft(cwd);
+  }, [cwd, pathFocused]);
+
+  // 远端 home 惰性获取并缓存（`~`/`~/x` 展开用）。
+  const resolveHome = async () => {
+    if (homeRef.current !== null) return homeRef.current;
+    try {
+      const value = await api.sftpHome(connectionId);
+      if (value && typeof value.home === "string" && value.home.startsWith("/")) {
+        homeRef.current = value.home;
+      }
+    } catch { /* 取不到 home 时就只支持绝对路径 */ }
+    return homeRef.current;
+  };
+
+  // 把用户输入的路径归一成绝对路径：支持 `~`、`~/x`、`/abs`、相对路径（按当前 cwd）。
+  const normalizeTypedPath = async (raw) => {
+    const text = String(raw ?? "").trim();
+    if (text === "") return null;
+    if (text === "~" || text.startsWith("~/")) {
+      const home = await resolveHome();
+      if (home === null) return null;
+      const suffix = text.slice(1);
+      if (home === "/") return suffix === "" ? "/" : suffix;
+      return `${home}${suffix}`;
+    }
+    if (text.startsWith("/")) return text.replace(/\/{2,}/g, "/");
+    // 相对路径：按当前目录拼
+    const base = cwdRef.current === "/" ? "" : cwdRef.current;
+    return `${base}/${text}`.replace(/\/{2,}/g, "/");
+  };
+
+  // 提交路径框：Enter 或失焦时抵达该目录。
+  const commitTypedPath = async (raw) => {
+    const target = await normalizeTypedPath(raw);
+    if (target === null) {
+      setPathDraft(cwdRef.current);
+      return;
+    }
+    setPathDraft(target);
+    if (target === cwdRef.current) return;
+    await load(target);
+  };
+
   const visibleEntries = entries === null ? null : filterEntries(entries, filter);
   // 文件页签跟随终端路径（用户 2026-10-19）：终端 cd 后自动切目录。
   useEffect(() => {
@@ -653,36 +704,54 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
   // （拿不到 cwd 拼路径）时才退回旧的「切到 cwd 找名字」行为。
   useEffect(() => {
     if (!pendingFile) return;
-    const { name, path: absolutePath, cwd: targetCwd } = pendingFile;
+    const { name, path: absolutePath, cwd: targetCwd, sessionId } = pendingFile;
     onPendingConsumed?.();
     void (async () => {
-      // 候选目录：绝对路径的父目录优先，其次终端 cwd、当前目录，最后几个常见位置
-      // （连上服务器后 cwd 尚未解析时，文件多半在 /root 或 /）。
-      const candidates = [];
-      if (typeof absolutePath === "string" && absolutePath.startsWith("/")) candidates.push(dirnameOf(absolutePath));
-      if (targetCwd) candidates.push(targetCwd);
-      candidates.push(cwdRef.current, "/root", "/");
-      const uniqueCandidates = [...new Set(candidates.filter((dir) => typeof dir === "string" && dir.startsWith("/")))];
-
       setError(null);
-      for (const directory of uniqueCandidates) {
-        // 绝对路径可用时先 stat：避免为了一个不存在的猜测目录白跑一次 list。
-        if (typeof absolutePath === "string" && absolutePath.startsWith("/")) {
-          try {
-            const stat = await api.sftpStat(connectionId, absolutePath);
-            if (stat === undefined || stat === null) continue;
-          } catch { continue; }
-        }
-        await load(directory);
+      // 打开「某个目录里的某个文件」：切到该目录并按名字打开。
+      const openIn = async (directory) => {
+        if (typeof directory !== "string" || !directory.startsWith("/")) return false;
+        if (directory !== cwdRef.current) await load(directory);
         const entry = (entriesRef.current ?? []).find((item) => item.name === name);
-        if (!entry) continue;
+        if (!entry) return false;
         if (entry.isDirectory) openEntry(entry);
         else if (isImageName(entry.name)) void openPreview(entry);
         else if (isFileViewerName(entry.name)) void openViewer(entry);
         else void openEditor(entry);
-        return;
+        return true;
+      };
+
+      // ① 有绝对路径就 stat 它，确认真实存在后再切父目录 —— 这是最可靠的一步。
+      if (typeof absolutePath === "string" && absolutePath.startsWith("/")) {
+        try {
+          const stat = await api.sftpStat(connectionId, absolutePath);
+          if (stat !== undefined && stat !== null) {
+            if (await openIn(dirnameOf(absolutePath))) return;
+          }
+        } catch { /* 不存在就走下面的真实目录查询 */ }
       }
-      setError(t(`没找到 ${name}（已尝试：${uniqueCandidates.join(", ")}）`));
+
+      // ② 问 host 要该会话交互 shell 的**真实** cwd（读 /proc/<shell>/cwd，
+      //    与 xssh_exec 同一套机制）。用户 2026-10-21 明确要求：不要猜固定路径。
+      //    前端从提示符文本解析出的 cwd 在多终端、自定义提示符、exec 通道跑过命令后
+      //    都可能过期，只有 shell 自己的 cwd 是权威的。
+      const directories = [];
+      if (sessionId && typeof api.sessionCwd === "function") {
+        try {
+          const value = await api.sessionCwd(sessionId);
+          if (value && typeof value.cwd === "string" && value.cwd.startsWith("/")) {
+            directories.push(value.cwd);
+          }
+        } catch { /* 拿不到再退回终端解析值 */ }
+      }
+      // ③ 其次用该终端自己解析出的 cwd（点击时由终端视图带过来，已按会话隔离）。
+      if (targetCwd) directories.push(targetCwd);
+
+      for (const directory of [...new Set(directories)]) {
+        if (await openIn(directory)) return;
+      }
+      const shown = directories.length > 0 ? directories[0] : t("未知");
+      setError(t(`没找到 ${name}（该文件不在终端当前目录 ${shown} 中）`));
     })();
   }, [pendingFile]);
 
@@ -731,7 +800,21 @@ export function SshFiles({ api, connectionId, onCd, initialPath = "/", onEditFil
     <div style={filesStyles.root}>
       <div style={filesStyles.toolbar}>
         <button onClick={goUp} disabled={cwd === "/"} style={filesStyles.btn} title={t("上级目录")}>↑</button>
-        <span style={filesStyles.path} title={cwd}>{cwd}</span>
+        <input
+          value={pathDraft}
+          onChange={(e) => setPathDraft(e.target.value)}
+          onFocus={() => setPathFocused(true)}
+          onBlur={() => { setPathFocused(false); void commitTypedPath(pathDraft); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); void commitTypedPath(pathDraft); e.currentTarget.blur(); }
+            else if (e.key === "Escape") { e.preventDefault(); setPathDraft(cwd); e.currentTarget.blur(); }
+          }}
+          placeholder={t("输入路径后回车，支持 ~ 与相对路径")}
+          title={t("可直接输入路径抵达目录：支持 /绝对路径、~ 或 ~/子目录、以及相对当前目录的路径")}
+          aria-label={t("当前目录（可编辑）")}
+          spellCheck={false}
+          style={filesStyles.pathInput}
+        />
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -1149,6 +1232,15 @@ const filesStyles = {
   root: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: 6 },
   toolbar: { display: "flex", alignItems: "center", gap: 6, flex: "none" },
   path: { flex: 1, fontSize: 12, color: "var(--dsw-alias-label-secondary, #9aa3af)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "rtl", textAlign: "left" },
+  // 可编辑路径框（用户 2026-10-21）：直接输入路径抵达目录。等宽字体方便看路径，
+  // rtl 保持尾部可见（长路径时看到的是最后几段，而不是开头）。
+  pathInput: {
+    flex: 1, minWidth: 0, fontSize: 12, fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+    color: "var(--dsw-alias-label-primary, #d7dbe2)",
+    background: "var(--dsw-alias-bg-layer-1, #101418)",
+    border: "1px solid var(--dsw-alias-border-l4, #2a303a)",
+    borderRadius: 6, padding: "3px 8px", outline: "none", direction: "rtl", textAlign: "left"
+  },
   btn: {
     background: "var(--dsw-alias-bg-layer-1, transparent)", border: "1px solid var(--dsw-alias-border-l4, #3a414b)", color: "var(--dsw-alias-label-primary, #d7dbe2)",
     borderRadius: 6, padding: "3px 8px", fontSize: 12, cursor: "pointer", flex: "none"

@@ -317,23 +317,53 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     const onCwdChangeRef = { current: onCwdChange };
     // 远端 home：`~` 不能硬编码成 /root（非 root 用户、home 不在 /root 的机器会全错）。
     // 连上后取一次并缓存；取不到就宁可不跳，也不拼一个错的路径。
+    // 关键（用户 2026-10-21 复现「其他目录点文件不跳」）：home 必须**提前预热**。
+    // 之前是惰性的——第一次解析 `~/x` 时 home 还是 null，expandHome 返回 null，
+    // 绝对路径直接丢掉；而 provideLinks 只在鼠标悬停时跑一次，于是那次点击必然失败。
+    // 现在连上就预取，并在拿到 home 后把当前目录重解析一次（回填 cwd）。
     const homeRef = { current: null };
     let homePending = false;
-    const ensureHome = () => {
+    const homeWaiters = [];
+    const ensureHome = (onReady) => {
+      if (typeof onReady === "function") {
+        if (homeRef.current !== null) onReady(homeRef.current);
+        else homeWaiters.push(onReady);
+      }
       if (homeRef.current !== null || homePending) return;
       homePending = true;
       void api.sftpHome(connectionId)
-        .then((value) => { if (value && typeof value.home === "string") homeRef.current = value.home; })
+        .then((value) => {
+          if (value && typeof value.home === "string" && value.home.startsWith("/")) {
+            homeRef.current = value.home;
+          }
+        })
         .catch(() => { /* 忽略：下次解析会重试 */ })
-        .finally(() => { homePending = false; });
+        .finally(() => {
+          homePending = false;
+          const pendingWaiters = homeWaiters.splice(0, homeWaiters.length);
+          for (const waiter of pendingWaiters) { try { waiter(homeRef.current); } catch { /* 忽略 */ } }
+        });
     };
     const parsePromptCwd = (text) => {
       const parsed = parsePromptPath(text);
       if (parsed === null) return null;
       if (parsed.startsWith("/")) return parsed;
-      ensureHome();
+      // 相对 home 的路径：home 已就绪就立刻展开；否则等 home 到位再回填一次，
+      // 避免「第一次解析刚好在 home 就绪前」把这次结果永久丢掉。
+      if (homeRef.current === null) {
+        ensureHome((home) => {
+          const expanded = expandHome(parsed, home);
+          if (expanded !== null) {
+            currentCwdRef.current = expanded;
+            onCwdChangeRef.current?.(expanded);
+          }
+        });
+        return null;
+      }
       return expandHome(parsed, homeRef.current);
     };
+    // 连上就预热远端 home（不等到遇到 `~` 才取），否则第一次解析必然失败。
+    ensureHome();
     const owner = { sessionId };
     const entry = terminalPool.acquire(sessionId, owner);
     entryRef.current = entry;
@@ -541,10 +571,12 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
             // 拼成绝对路径传给文件页签，避免文件页签目录与终端不同步时报
             // 「某某目录无此文件」。链接本身可能是绝对路径（/root/x.png）或
             // 相对路径（./x.png、sub/x.png），三种都归一化。
-            const absolutePath = (() => {
+            // 解析绝对路径：优先链接自身是绝对路径；否则用当前目录拼。
+            // 注意要在 **activate 时**再算一次（用户 2026-10-21）——provideLinks 只在
+            // 鼠标悬停时跑，悬停那一刻 cwd 可能还没解析出来（或 home 还没预热完），
+            // 若此时把 null 烤进闭包，这次点击就永久拿不到绝对路径。
+            const resolveAbsolutePath = () => {
               if (name.startsWith("/")) return name;
-              // cwd 可能还没解析到（首次连上后没有新数据到达时 currentCwdRef 仍是 null），
-              // 点击这一刻再从缓冲区光标行解析一次，避免把「未知」当成「根目录」。
               let cwd = currentCwdRef.current;
               if (!cwd) {
                 try {
@@ -557,12 +589,13 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
               if (!cwd) return null;
               const cleaned = name.replace(/^\.\//, "");
               return `${cwd === "/" ? "" : cwd}/${cleaned}`;
-            })();
+            };
             links.push({
               range: { start: { x: start, y }, end: { x: start + name.length - 1, y } },
               text: name,
               decorations: { underline: true, pointerCursor: true },
-              activate: () => onOpenFileToken?.(name, absolutePath)
+              // 把该终端**自己**的 cwd 一起交出去（多终端时不能依赖面板级状态）。
+              activate: () => onOpenFileToken?.(name, resolveAbsolutePath(), currentCwdRef.current)
             });
           }
           callback(links.length > 0 ? links : undefined);
@@ -1727,7 +1760,14 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
   const [filesFollowTerminal, setFilesFollowTerminal] = useState(true);
   // Ctrl+滚轮/捏合缩放字号开关（用户 2026-10-20；设置页可关）。
   const [wheelZoomEnabled, setWheelZoomEnabled] = useState(true);
-  const [terminalCwd, setTerminalCwd] = useState(null);
+  // 每个终端会话各自的当前目录（用户 2026-10-21）。
+  // 之前是全局面板状态，多终端时互相覆盖：在第二个终端点文件会拿到第一个终端的旧目录，
+  // 于是报「没找到 xxx（已尝试：<另一个终端的目录>）」。
+  const [cwdBySession, setCwdBySession] = useState({});
+  const rememberCwd = (sessionId, cwd) => {
+    if (typeof sessionId !== "string" || typeof cwd !== "string") return;
+    setCwdBySession((current) => (current[sessionId] === cwd ? current : { ...current, [sessionId]: cwd }));
+  };
   useEffect(() => {
     const refresh = () => {
       api.groupList?.().then((v) => setGroups(v.groups ?? [])).catch(() => {});
@@ -1768,6 +1808,8 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
   const active = paneConnections.find((c) => c.connectionId === resolvedActiveConnectionId);
   // 行号视图只看当前活动连接的第一个会话（与终端面板用的是同一个会话）。
   const activeSessionId = active?.sessions?.[0] ?? null;
+  // 当前激活终端的目录（必须在 activeSessionId 之后派生：TDZ 会直接崩掉整个面板）。
+  const terminalCwd = activeSessionId === null ? null : (cwdBySession[activeSessionId] ?? null);
 
   // 快捷键与发送规则（用户 2026-10-18）：挂载时拉一次，窗口重新聚焦再拉一次，
   // 这样设置页改完回到面板就生效。
@@ -2241,8 +2283,11 @@ export function SshPanel({ api, credentials, viewId = DEFAULT_VIEW_ID, viewSigna
                         onFontChange={changeTerminalFont}
                         fileLinksEnabled={terminalFileLinks && filesFollowTerminal}
                         wheelZoom={wheelZoomEnabled}
-                        onCwdChange={setTerminalCwd}
-                        onOpenFileToken={(name, absolutePath) => { setTab("files"); setPendingFile({ name, path: absolutePath, cwd: terminalCwd }); }}
+                        onCwdChange={(cwd) => rememberCwd(sessionId, cwd)}
+                        onOpenFileToken={(name, absolutePath, ownCwd) => {
+                          setTab("files");
+                          setPendingFile({ name, path: absolutePath, cwd: ownCwd ?? cwdBySession[sessionId] ?? null, sessionId });
+                        }}
                         lightTheme={lightTheme}
                         onInsertDraft={(text) => setDraftInsert({ text, nonce: Date.now() })}
                         onReady={(sid, termApi) => {

@@ -3171,6 +3171,38 @@ export default class SshOpsService extends TypertRemoteService {
   }
 
   /**
+   * 该会话交互 shell 的**真实**当前目录（用户 2026-10-21）。
+   *
+   * 为什么需要它：终端里点文件名时，前端只能靠「从提示符文本里解析 cwd」猜路径。
+   * 多终端 / 用 exec 通道跑过命令 / 提示符被自定义过时，这个猜测会过期或解析失败，
+   * 于是打开文件会报「没找到 xxx」。这里用与 xssh_exec 相同的机制（读
+   * /proc/<shell>/cwd 并 base64 回显）取真实目录——不猜、不穷举固定路径。
+   *
+   * 只读：探测命令是 `:`（空操作），不改目录、不写终端、不进命令台账。
+   */
+  async sessionCwd(request) {
+    const session = this.sessions.get(request.sessionId);
+    const conn = session && this.connections.get(session.connectionId);
+    if (!session || !conn || conn.dead || conn.closing) {
+      return { ok: false, error: fail("terminal-not-found", t("会话不存在或已断开")) };
+    }
+    const client = conn.client;
+    try {
+      if (!posixLoginShell(await this.resolveLoginShell(conn))) {
+        return { ok: false, error: fail("unsupported-shell", t("无法确认此 shell 的当前目录")) };
+      }
+      const probe = await this.collectExecOutput(client, buildCwdAwareCommand(":"), 5000);
+      const cwd = extractExecCwd(probe.stdout).cwd;
+      if (probe.exitCode !== 0 || cwd === null) {
+        return { ok: false, error: fail("terminal-busy", t("未确认空闲交互 shell，无法取得当前目录")) };
+      }
+      return { ok: true, value: { cwd } };
+    } catch (error) {
+      return { ok: false, error: fail("cwd-failed", error.message) };
+    }
+  }
+
+  /**
    * Install the OSC 133 markers in the session's shell (bash/zsh): the prompt
    * and each command's end are announced with an exit code and a cwd report,
    * which is what readTerminalContext surfaces as `shell`. Gated exactly like

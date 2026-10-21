@@ -61,6 +61,7 @@ export const DESCRIPTORS = [
   def("openSession", S.openSessionRequestSchema, "SshOpenSessionRequest", S.openSessionResultSchema, "SshOpenSessionResult"),
   def("listTerminalContexts", S.terminalContextListRequestSchema, "SshTerminalContextListRequest", S.terminalContextListResultSchema, "SshTerminalContextListResult"),
   def("readTerminalContext", S.terminalContextReadRequestSchema, "SshTerminalContextReadRequest", S.terminalContextReadResultSchema, "SshTerminalContextReadResult"),
+  def("sessionCwd", S.sessionCwdRequestSchema, "SshSessionCwdRequest", S.sessionCwdResultSchema, "SshSessionCwdResult"),
   def("changeDirectory", S.changeDirectoryRequestSchema, "SshChangeDirectoryRequest", S.writeResultSchema, "SshWriteResult"),
   def("enableShellIntegration", S.enableShellIntegrationRequestSchema, "EnableShellIntegrationRequest", S.enableShellIntegrationResultSchema, "EnableShellIntegrationResult"),
   def("write", S.writeRequestSchema, "SshWriteRequest", S.writeResultSchema, "SshWriteResult"),
