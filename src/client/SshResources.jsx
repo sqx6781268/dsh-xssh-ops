@@ -164,6 +164,8 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
   // 代理库是「连接设置」里维护的共享列表：打开编辑器时拉一次最新的，否则刚在
   // 设置页添加的代理不会出现在「从代理库选择」里（用户 2026-10-18 反馈）。
   const [library, setLibrary] = useState(proxyLibrary);
+  const [libraryError, setLibraryError] = useState(null);
+  const [selectedProxyId, setSelectedProxyId] = useState("");
   useEffect(() => {
     let alive = true;
     api.keepAliveGet?.().then((result) => {
@@ -174,7 +176,9 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
       if (alive && !initial && typeof value?.lastUsername === "string" && value.lastUsername !== "") {
         setForm((previous) => (previous.username === "root" || previous.username === "" ? { ...previous, username: value.lastUsername } : previous));
       }
-    }).catch(() => {});
+    }).catch((cause) => {
+      if (alive) setLibraryError(cause?.message ?? String(cause));
+    });
     return () => { alive = false; };
   }, [api]);
   // Advanced options start collapsed; an existing resource that already
@@ -201,10 +205,13 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
   const addJump = () => setForm((current) => ({ ...current, proxyJump: [...current.proxyJump, { profileId: "" }] }));
   const updateJump = (index, key, value) => setForm((current) => ({ ...current, proxyJump: current.proxyJump.map((hop, i) => i === index ? { ...hop, [key]: value } : hop) }));
   const removeJump = (index) => setForm((current) => ({ ...current, proxyJump: current.proxyJump.filter((_, i) => i !== index) }));
-  const setProxy = (key) => (event) => setForm((current) => ({
-    ...current,
-    proxy: { ...current.proxy, [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value }
-  }));
+  const setProxy = (key) => (event) => {
+    setSelectedProxyId("");
+    setForm((current) => ({
+      ...current,
+      proxy: { ...current.proxy, [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value }
+    }));
+  };
 
   const importKey = async (event) => {
     const file = event.target.files?.[0];
@@ -321,6 +328,8 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
                 // 复制为新增起点：带入全部字段但清掉 profileId（保存时成为新记录）；
                 // 名称加「副本」后缀提示这是复制来的。
                 setForm({ ...profileToForm(source), profileId: undefined, name: source.name + t("（副本）") });
+                setSelectedProxyId("");
+                setProxyOpen(Boolean(source.proxy?.host));
               }}
               style={styles.input}>
               <option value="">{t("从已保存的服务器复制…")}</option>
@@ -373,25 +382,29 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
           {form.proxyJump.map((hop, index) => <div key={index} style={styles.jumpRow}><select value={hop.profileId ?? ""} onChange={(event) => updateJump(index, "profileId", event.target.value)} style={styles.input}><option value="">{t("选择已保存服务器")}</option>{profiles.filter((profile) => profile.profileId !== form.profileId).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name} · {profile.username}@{profile.host}:{profile.port}</option>)}</select><button type="button" onClick={() => removeJump(index)} style={styles.danger}>{t("移除")}</button></div>)}
           <button type="button" onClick={addJump} style={styles.secondary}>{t("＋ 添加跳板机")}</button>
         </Field>
+        {/* 库选择始终可见，只有手工代理字段折叠，避免已有代理被误认为功能消失。 */}
+        <Field label={t("从代理库选择")}>
+          <select aria-label={t("从代理库选择")} value={selectedProxyId} onChange={(event) => {
+            const entry = library.find((item) => item.proxyId === event.target.value);
+            setSelectedProxyId(event.target.value);
+            setForm((current) => ({
+              ...current,
+              proxy: { type: "socks5", host: entry?.host ?? "", port: String(entry?.port ?? 1080), username: entry?.username ?? "", password: entry?.password ?? "" },
+              // 切换到无认证代理时也应清掉旧代理的密码。
+              clearProxyPassword: !entry?.password
+            }));
+            if (entry) setProxyOpen(true);
+          }} style={styles.input}>
+            <option value="">{t("不使用代理 / 手动填写")}</option>
+            {library.map((entry) => <option key={entry.proxyId} value={entry.proxyId}>{entry.name} · {entry.host}:{entry.port}{entry.username ? ` · ${entry.username}` : ""}</option>)}
+          </select>
+          {libraryError && <small role="alert" style={styles.hint}>{t("读取代理库失败：{message}").replace("{message}", libraryError)}</small>}
+          {!libraryError && library.length === 0 && <small style={styles.hint}>{t("可在连接设置中添加并保存 SOCKS5 代理，也可展开下方手动填写。")}</small>}
+        </Field>
         <button type="button" onClick={() => setProxyOpen((open) => !open)} style={styles.advToggle} aria-expanded={proxyOpen}>{t(`${proxyOpen ? "▾" : "▸"} SOCKS 代理${proxyOpen ? "" : t("（可选；默认不使用）")}`)}</button>
         {proxyOpen && (
         <div style={{ display: "contents" }}>
         <Field label={t("代理（SOCKS5）")} hint={t("先连接此 SOCKS5 代理，再由代理连接到服务器；代理主机留空表示不使用代理。标准 SOCKS5 代理这里只填代理地址，目标仍是上方真实服务器主机/端口；仅转发代理机本机端口的代理，才需把上方服务器主机填 127.0.0.1、端口填代理机上的转发端口。")}>
-          {(library.length > 0) && (
-            <Field label={t("从代理库选择")}>
-              <select value="" onChange={(event) => {
-                const entry = library.find((item) => item.proxyId === event.target.value);
-                if (!entry) return;
-                setProxy("host")({ target: { value: entry.host } });
-                setProxy("port")({ target: { value: String(entry.port) } });
-                setProxy("username")({ target: { value: entry.username ?? "" } });
-                setProxy("password")({ target: { value: entry.password ?? "" } });
-              }} style={styles.input}>
-                <option value="">{t("选择已保存的代理…")}</option>
-                {library.map((entry) => <option key={entry.proxyId} value={entry.proxyId}>{entry.name} · {entry.host}:{entry.port}{entry.username ? ` · ${entry.username}` : ""}</option>)}
-              </select>
-            </Field>
-          )}
           <div style={styles.formGrid}>
             <Field label={t("类型")}><input value="SOCKS5" readOnly style={styles.input} /></Field>
             <Field label={t("代理主机")} style={{ gridColumn: "span 2" }}><input value={form.proxy.host} onChange={setProxy("host")} placeholder={t("例如 192.168.10.4 或 gw.example.com")} style={styles.input} autoComplete="off" /></Field>
@@ -400,7 +413,7 @@ export function ResourceEditor({ initial, groups, profiles, sharedCredentials = 
           </div>
           <Field label={t("代理密码")} hint={initial?.proxyCredentialConfigured ? t("已保存；留空保持不变") : t("无需认证的代理留空即可")}>
             <input type="password" value={form.proxy.password} onChange={setProxy("password")} style={styles.input} autoComplete="new-password" />
-            {initial?.proxyCredentialConfigured && <Check label={t("清除已保存的代理密码")} checked={form.clearProxyPassword} onChange={setProxy("clearProxyPassword")} />}
+            {initial?.proxyCredentialConfigured && <Check label={t("清除已保存的代理密码")} checked={form.clearProxyPassword} onChange={set("clearProxyPassword")} />}
           </Field>
         </Field>
         </div>

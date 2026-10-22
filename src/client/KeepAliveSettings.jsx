@@ -173,8 +173,14 @@ export function KeepAliveSettings({ api, connectionId = undefined }) {
         idleStringText: form.idleStringText,
         tcpKeepAliveEnabled: form.tcpKeepAliveEnabled,
         tcpKeepAliveInitialDelaySec: form.tcpKeepAliveInitialDelaySec,
-        // R9 登录脚本：这些字段与保活同一张设置表，必须一起发 —— 早期版本只发
-        // 保活字段，规则表能编辑但**存不下去**（刷新即丢）。
+        // 输出、日志和终端联动控件与保活共用保存按钮，必须一起提交。
+        outputWarnKB: form.outputWarnKB ?? OUT_WARN_DEFAULT_KB,
+        sessionLogAutoPruneEnabled: form.sessionLogAutoPruneEnabled !== false,
+        sessionLogMaxTotalMB: form.sessionLogMaxTotalMB ?? OUT_LOG_MAX_TOTAL_MB_DEFAULT,
+        sessionLogMaxAgeDays: form.sessionLogMaxAgeDays ?? OUT_LOG_MAX_AGE_DAYS_DEFAULT,
+        filesFollowTerminal: form.filesFollowTerminal !== false,
+        terminalFileLinks: form.terminalFileLinks !== false,
+        wheelZoomEnabled: form.wheelZoomEnabled !== false,
         proxyLibrary: form.proxyLibrary ?? [],
         // 终端背景图（用户 2026-10-18）：随同一张设置表保存。
         terminalBackground: form.terminalBackground ?? { enabled: false, dataUrl: "", maskOpacity: 60, blur: 0 }

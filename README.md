@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.6-blue)
+![version](https://img.shields.io/badge/version-0.1.7-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.6.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.6
+tar -xzf dsh-xssh-ops-0.1.7.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.6.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -171,6 +171,14 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.6.tgz
 > 历史说明：0.1.0 时期本插件曾 fork 自 `dsh-ssh-ops` 并统一加了 `x` 前缀（当时可与上游同装共存）。**自 0.1.1 起不再跟随上游**：不合并上游更新，功能以本仓库的 README 与真实代码为准；上游有、本插件没有的能力（数据库管理、快捷命令片段、批量工具）不会补回来，如有需要请单独评估。
 
 ## 更新记录（近期）
+
+### 2026-10-23 · v0.1.7 —— SOCKS 代理选择与功能回归修复
+
+- **代理库入口**：新增/编辑服务器中直接选择已保存 SOCKS5 代理，手填字段仍可折叠；修复清除代理密码与切换免认证代理残留旧密码。
+- **登录后命令**：不配置 Expect 规则也能执行；有规则时保持先规则后命令。
+- **设置保存**：补齐输出阈值、日志清理、文件跟随、终端文件识别、Ctrl+滚轮字号选项。
+- **编辑器与台账**：切回未保存文件仍可保存；修正命令来源、登录后命令默认过滤与多行输出换行。
+- **验证**：128 项测试通过；Web/Tabbit 实测代理 SSH 连接、SFTP 读写、设置读回与 Monaco 切换文件保存。细节见 [回归排查记录](docs/2026-10-23-功能回归排查与修复.md)。
 
 ### 2026-10-22 · v0.1.6 —— 文件页签可编辑路径框 + 多终端点文件定位
 - **新增**：文件页签顶部路径改为**可编辑输入框**，输入路径回车直达（支持 `/绝对路径`、`~`、`~/子目录`、相对路径；`Esc` 还原）

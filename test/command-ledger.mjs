@@ -38,6 +38,51 @@ function makeLedger(options = {}) {
   assert.ok(COMMAND_SOURCES.includes("login-script"));
 }
 
+// ── 新增来源必须保真，登录后命令默认隐藏但仍可显式查询 ─────────────────
+{
+  const { ledger } = makeLedger();
+  for (const source of ["user-broadcast", "login-post", "login-script"]) {
+    assert.equal(ledger.open({ text: `echo ${source}`, source, markLine: 1 }).source, source);
+  }
+  assert.deepEqual(ledger.recent().map((record) => record.source), ["user-broadcast"]);
+  assert.equal(ledger.recent({ includeHidden: true }).length, 3);
+  assert.deepEqual(ledger.recent({ source: "login-post" }).map((record) => record.source), ["login-post"]);
+  const service = Object.create(SshOpsService.prototype);
+  service.sessions = new Map([["s-1", { commandLedger: ledger }]]);
+  assert.deepEqual(service.listCommands().value.commands.map((record) => record.source), ["user-broadcast"]);
+  assert.equal(service.listCommands({ source: "login-post" }).value.commands.length, 1);
+}
+
+// ── 批量发送走真实 Host 发送入口后仍保留来源 ───────────────────────────
+{
+  const { ledger } = makeLedger();
+  const written = [];
+  const session = { id: "s-1", connectionId: "conn-1", exited: null, stream: { write: (text) => written.push(text) }, commandLedger: ledger };
+  const service = Object.create(SshOpsService.prototype);
+  service.sessions = new Map([[session.id, session]]);
+  service.lineMark = () => 1;
+  service.updateInputMirror = () => {};
+  service.scheduleIdleClose = () => {};
+  const result = await service.sendCommand({ sessionId: session.id, text: "echo broadcast", source: "user-broadcast" });
+  assert.equal(result.ok, true);
+  assert.deepEqual(written, ["echo broadcast\r"]);
+  assert.equal(ledger.recent()[0].source, "user-broadcast");
+}
+
+// ── 按命令 ID 读取多行输出保留真实换行 ─────────────────────────────────
+{
+  const { ledger } = makeLedger();
+  const journal = createLineJournal();
+  journal.append("echo fixture\nfirst\nsecond\n");
+  const record = ledger.open({ text: "echo fixture", markLine: 1 });
+  ledger.closeFromShellIntegration({ endLine: 3, exitCode: 0 });
+  const service = Object.create(SshOpsService.prototype);
+  service.sessions = new Map([["s-1", { commandLedger: ledger, lineJournal: journal }]]);
+  const result = await service.readCommandOutput({ commandId: record.commandId, waitMs: 0 });
+  assert.equal(result.ok, true);
+  assert.equal(result.value.text, "first\nsecond", "换行不能变成字面反斜杠 n");
+}
+
 // ── 回显行不进区间：startLine = markLine + 1 ───────────────────────────────
 {
   const { ledger } = makeLedger();

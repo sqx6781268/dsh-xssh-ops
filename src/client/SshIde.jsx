@@ -59,7 +59,7 @@ export function SshIde({ api, connectionId, lightTheme = false, pendingPath = nu
   const [treeWidth, setTreeWidth] = useState(260);
   const file = files.find((item) => item.path === activePath) ?? null;
   const [language, setLanguage] = useState("plaintext");
-  const [dirty, setDirty] = useState(false);
+  const dirty = file !== null && file.text !== file.original;
   const [wrap, setWrap] = useState(false);
   const [lineNumbers, setLineNumbers] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -170,7 +170,6 @@ export function SshIde({ api, connectionId, lightTheme = false, pendingPath = nu
         : [...prev, { path, text: decoded.text, original: decoded.text }]));
       setActivePath(path);
       setLanguage(languageForPath(entry.name));
-      setDirty(false);
     } catch (cause) {
       setError(cause?.message ?? String(cause));
     } finally {
@@ -185,7 +184,6 @@ export function SshIde({ api, connectionId, lightTheme = false, pendingPath = nu
     try {
       await api.sftpWriteFile(connectionId, file.path, encodeEditableText(file.text));
       setFiles((prev) => prev.map((item) => (item.path === file.path ? { ...item, original: file.text } : item)));
-      setDirty(false);
     } catch (cause) {
       setError(cause?.message ?? String(cause));
     } finally {
@@ -269,7 +267,6 @@ export function SshIde({ api, connectionId, lightTheme = false, pendingPath = nu
             value={file.text}
             onChange={(next) => {
               setFiles((prev) => prev.map((item) => (item.path === file.path ? { ...item, text: next } : item)));
-              setDirty(next !== file.original);
             }}
             theme={lightTheme ? "light" : "dark"}
             language={language}

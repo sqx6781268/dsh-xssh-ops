@@ -35,17 +35,19 @@ export const DEFAULT_SUBSTRING_LIMIT = 5;
 /** 命令来源。区分它才能回答「这条是谁发的」。 */
 export const COMMAND_SOURCES = [
   "user-editbox",   // 命令编辑框（常用通道，记台账）
+  "user-broadcast", // 批量发送（每个目标会话独立记台账）
+  "login-post",     // 登录后命令（默认被列表过滤）
   "user-direct",    // 直接在 xterm 里敲（备用通道，提交时才补记，见 9-Q4）
   "agent-tool",     // 智能体经工具发送
   "agent-bg",       // 智能体后台执行
   "confirm-card",   // 危险命令确认卡片
-  "login-script"    // 登录脚本 / 保活字符串（默认被列表过滤）
+  "login-script"    // 登录脚本（默认被列表过滤）
 ];
 
 /** 默认过滤掉的来源：登录脚本不该污染「我发过什么命令」。
  *  注意**保活字符串不在此列** —— 它根本不进台账（见 plan 5.8 的隔离要求），
  *  所以不需要一个"隐藏来源"来表示它（早期曾有个 KEEPALIVE_SOURCE 常量，属多余，已删）。 */
-export const DEFAULT_HIDDEN_SOURCES = ["login-script"];
+export const DEFAULT_HIDDEN_SOURCES = ["login-script", "login-post"];
 
 function makeCommandId(seq, idFactory) {
   if (typeof idFactory === "function") return idFactory(seq);

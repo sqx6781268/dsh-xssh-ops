@@ -4119,7 +4119,7 @@ export default class SshOpsService extends TypertRemoteService {
     const read = journal.read({ fromLine: found.record.startLine, toLine: found.record.endLine ?? undefined, maxBytes });
     // line-journal.read() 返回的是 lines 数组（没有 text 字段），这里自己拼；
     // 之前直接用 read.text 拿到 undefined，命令输出永远显示「（无输出）」。
-    const text = (read.lines ?? []).map((entry) => entry.text).join("\\n");
+    const text = (read.lines ?? []).map((entry) => entry.text).join("\n");
     return {
       ok: true,
       value: {
@@ -5686,13 +5686,15 @@ export default class SshOpsService extends TypertRemoteService {
       ? this.requireProfileTable().get(connection.profileId)
       : undefined;
     const perServer = profileRecord?.loginScript;
-    const perServerEnabled = perServer !== undefined && perServer !== null && perServer.rulesEnabled === true;
-    const rulesEnabled = perServerEnabled || settings.loginScriptRulesEnabled === true;
-    if (!rulesEnabled) return { ok: true, started: false };
-    const rules = perServerEnabled
+    const perServerConfigured = perServer !== undefined && perServer !== null;
+    const perServerEnabled = perServerConfigured && perServer.rulesEnabled === true;
+    const rulesEnabled = perServerConfigured ? perServerEnabled : settings.loginScriptRulesEnabled === true;
+    const rules = !rulesEnabled ? [] : perServerConfigured
       ? (Array.isArray(perServer.rules) ? perServer.rules : [])
       : (Array.isArray(settings.loginScriptRules) ? settings.loginScriptRules : []);
-    if (rules.length === 0) return { ok: true, started: false };
+    // 登录后命令独立于 Expect 规则开关；空规则引擎会直接完成，由同一节拍器执行后续命令。
+    const postCommands = Array.isArray(perServer?.postCommands) ? perServer.postCommands : [];
+    if (rules.length === 0 && postCommands.length === 0) return { ok: true, started: false };
     if (session.loginScript !== null && session.loginScript !== undefined) {
       return { ok: true, started: false, already: true };
     }
@@ -5715,7 +5717,7 @@ export default class SshOpsService extends TypertRemoteService {
       const runner = createLoginScriptRunner({ rules, matchMode, stepTimeoutMs, onTimeout });
       session.loginScript = runner;
       // 登录后命令（用户 2026-10-17 增强）：expect/send 规则跑完后逐条发送。
-      session.loginScriptPostCommands = perServerEnabled ? (Array.isArray(perServer.postCommands) ? perServer.postCommands : []) : [];
+      session.loginScriptPostCommands = [...postCommands];
       session.loginScriptPostSent = false;
       session.loginScriptStartedAt = new Date().toISOString();
       runner.start();

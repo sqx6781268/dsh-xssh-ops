@@ -1,15 +1,15 @@
 # DSH Desktop 安装说明（AI / 自动化可执行）
 
-> 本说明**仅针对 DSH Desktop 桌面版**（Electron 桌面应用）。DSH Desktop 使用 harness profile `web`，插件安装后必须**重启桌面应用**才生效。
+> 本说明**仅针对 DSH Desktop 桌面版**（Electron 桌面应用）。安装前确认目标 profile（本机桌面端为 `desktop`，其他环境按实际 profile），插件安装后必须**重启桌面应用**才生效。
 
 ## 0. 前置条件
 
 - 已安装并运行 **DSH Desktop**。
-- 已取得成品包 `dsh-xssh-ops-0.3.12.tgz`（来源：GitHub Releases 下载，或源码 `npm run pack:release` 构建产物 `release/` 下）。
+- 已取得成品包 `dsh-xssh-ops-0.1.7.tgz`（来源：GitHub Releases 下载，或源码 `npm run pack:release` 构建产物 `release/` 下）。
 
 ### 兼容性
 
-- 目标为 DSH Desktop / Web Profile `0.1.6` 系列；已验证 `0.1.6-alpha.1`。
+- v0.1.7 已在本机 DSH `0.2.1-rc.2` 的 Web profile 验收；使用者仍需核对目标宿主提供下列服务。
 - 宿主须提供 `sidebarRightTabs` 和 `sidebarRight`；SSH 以官方右侧标签运行，旧宿主（缺这两个 API）不再有浮动面板回退——宿主半工具照常可用，但没有终端 UI。
 - 上传／下载字节流需要 Web Profile 的 `webServer` 与请求来源校验服务；不具备时保留既有 SFTP 操作。目录归档下载被有意禁用并返回 `501`，防止 SFTP chroot 与 SSH shell 命名空间不一致。
 
@@ -36,13 +36,13 @@ $dsh  = "<INSTALL_DIR>\DSH Desktop\resources\app\node_modules\@deepseek-ai\dsh\l
 把 `<TARBALL>` 替换为 tgz 的绝对路径。
 
 ```powershell
-dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.3.12.tgz"
+dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.7.tgz"
 ```
 
 若 `dsh` 不在 PATH，用：
 
 ```powershell
-& $node $dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.3.12.tgz"
+& $node $dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.7.tgz"
 ```
 
 ## 3. 校验安装结果

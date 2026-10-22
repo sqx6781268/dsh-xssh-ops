@@ -35,10 +35,14 @@ if (process.platform === "win32") {
 // 两者都用 Windows 自带的 bsdtar（tar 命令），避免依赖 zip.exe。
 const tarGz = join(release, `${archiveRoot}.tar.gz`);
 const zip = join(release, `${archiveRoot}.zip`);
+// Windows 明确使用系统 bsdtar，避免 Git 的 GNU tar 把 .zip 静默写成 tar 格式。
+const tarCommand = process.platform === "win32"
+  ? join(process.env.SystemRoot ?? "C:/Windows", "System32", "tar.exe")
+  : "tar";
 // 注意：bsdtar 把 "D:\..." 当成 host:path（Cannot connect to D:），所以这里
 // cwd 切到 release、全部用相对名，避免盘符冒号被误解析。
 try {
-  execFileSync("tar", ["-czf", `${archiveRoot}.tar.gz`, archiveRoot], { cwd: release, stdio: "inherit" });
+  execFileSync(tarCommand, ["-czf", `${archiveRoot}.tar.gz`, archiveRoot], { cwd: release, stdio: "inherit" });
 } catch (error) {
   console.warn(`tar.gz 生成失败：${error.message}`);
 }
@@ -46,7 +50,7 @@ try {
   // bsdtar 的 -a 根据扩展名选择 zip 格式。
   // 本机 bsdtar 不支持 zip:compression 选项；zip 只是附带格式（未压缩，体积较大），
   // 主推 tar.gz / npm tgz。生成失败也不影响主产物。
-  execFileSync("tar", ["-a", "-cf", `${archiveRoot}.zip`, archiveRoot], { cwd: release, stdio: "inherit" });
+  execFileSync(tarCommand, ["-a", "-cf", `${archiveRoot}.zip`, archiveRoot], { cwd: release, stdio: "inherit" });
 } catch (error) {
   console.warn(`zip 生成失败（可忽略）：${error.message}`);
 }

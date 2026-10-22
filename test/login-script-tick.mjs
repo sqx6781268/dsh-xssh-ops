@@ -136,6 +136,73 @@ function makeService({ rules, stepTimeoutMs = 1000 } = {}) {
   assert.doesNotThrow(() => service.tickLoginScripts(Date.now() + 99999));
 }
 
+// ── 登录后命令独立于规则开关，调用真实启动、写入与台账逻辑 ─────────────
+function makeProfileService(loginScript) {
+  const fixture = makeService({ rules: [{ expect: "GLOBAL", send: "echo global" }] });
+  const { service, session } = fixture;
+  service.connections.get(session.connectionId).profileId = "profile-login";
+  service.requireProfileTable = () => new Map([["profile-login", { loginScript }]]);
+  service.sendCommand = SshOpsService.prototype.sendCommand;
+  return fixture;
+}
+
+for (const rulesEnabled of [undefined, false, true]) {
+  const { service, session, written } = makeProfileService({
+    ...(rulesEnabled === undefined ? {} : { rulesEnabled }),
+    rules: [], postCommands: ["echo post-one", "echo post-two"]
+  });
+  const started = service.startLoginScriptIfEnabled(session);
+  assert.equal(started.started, true, "只有登录后命令时也应启动");
+  assert.equal(started.totalRules, 0);
+  assert.deepEqual(written, [], "登录后命令交给节拍器统一执行");
+  service.tickLoginScripts();
+  assert.deepEqual(written, ["echo post-one\r", "echo post-two\r"]);
+  assert.equal(session.commandLedger.recent({ includeHidden: true }).length, 2, "每条后续命令都记台账");
+  assert.deepEqual(session.commandLedger.recent({ includeHidden: true }).map((record) => record.source), ["login-post", "login-post"]);
+  assert.deepEqual(session.commandLedger.recent(), [], "登录后命令默认从日常台账过滤");
+  assert.equal(service.startLoginScriptIfEnabled(session).already, true);
+  service.tickLoginScripts();
+  service.tickLoginScripts(Date.now() + 99999);
+  assert.equal(written.length, 2, "重复启动和节拍都不得重复发送");
+  clearTimeout(session.idleCloseTimer);
+}
+
+{
+  const { service, session, written } = makeProfileService({
+    rulesEnabled: false,
+    rules: [{ expect: "NEVER", send: "echo disabled-rule" }],
+    postCommands: ["echo independent"]
+  });
+  assert.equal(service.startLoginScriptIfEnabled(session).totalRules, 0, "禁用规则不回退执行全局规则");
+  service.tickLoginScripts();
+  assert.deepEqual(written, ["echo independent\r"], "规则禁用时后续命令仍执行");
+  clearTimeout(session.idleCloseTimer);
+}
+
+{
+  const { service, session, written } = makeProfileService({
+    rulesEnabled: true,
+    rules: [{ expect: "READY", send: "echo first-rule" }],
+    postCommands: ["echo after-rule"]
+  });
+  assert.equal(service.startLoginScriptIfEnabled(session).started, true);
+  service.tickLoginScripts();
+  assert.deepEqual(written, [], "规则等待期间不提前发送后续命令");
+  service.appendSessionOutput(session, "READY");
+  assert.deepEqual(written, ["echo first-rule\r"], "先走真实规则发送通道");
+  service.tickLoginScripts();
+  service.tickLoginScripts();
+  assert.deepEqual(written, ["echo first-rule\r", "echo after-rule\r"], "规则完成后只发送一次后续命令");
+  clearTimeout(session.idleCloseTimer);
+}
+
+{
+  const { service, session, written } = makeProfileService({ rulesEnabled: false, rules: [], postCommands: [] });
+  assert.equal(service.startLoginScriptIfEnabled(session).started, false);
+  service.tickLoginScripts();
+  assert.deepEqual(written, [], "没有登录动作时保持空转");
+}
+
 // ── 产物级护栏：定时器与推进方法必须真的在 lib/index.js 里 ─────────────
 {
   const { readFile } = await import("node:fs/promises");
