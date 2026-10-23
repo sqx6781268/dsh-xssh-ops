@@ -23,7 +23,11 @@ const CAPABILITY_MODULES = [
   "src/task-dir.js",
   "src/task-ledger.js",
   "src/tools/terminal-lines.js",
-  "src/tools/exec-background.js"
+  "src/tools/exec-background.js",
+  // 客户端能力同样要登记：canvas 测宽补丁是直接改第三方内部结构的模块，
+  // 一旦只被 import 没被调用，esbuild 会把它整块摇掉，而界面上只是"没变快"，
+  // 看代码和看界面都发现不了（用户 2026-10-24）。
+  "src/client/dom-width-cache.js"
 ];
 
 /** 收集 src/ + test/ + scripts/ 的全部文本作为「调用点搜索域」。 */
@@ -111,6 +115,13 @@ function exportedNames(text) {
     ["客户端行号格式化", client, "formatLineNumber"],
     ["客户端任务视图", client, "background tasks"],
     ["降级告警汇总", client, "taskDegradedNotices"],
+    // 命令台账输出时间线（用户 2026-10-24）：host 侧派生字段必须真的进了产物，
+    // 否则客户端永远拿不到耗时，界面上只是"那一栏不显示"，不报错也看不出所以然。
+    ["台账耗时派生", host, "firstOutputMs"],
+    ["台账首字节时刻", host, "firstOutputAt"],
+    // canvas 测宽补丁：幂等标记是它特有的字符串，出现在客户端产物里才说明这段代码
+    // 没被 tree-shaking 摇掉，且 SshPanel 真的调到了它。
+    ["终端 canvas 测宽补丁", client, "__xsshOpsCanvasMeasure"],
     // 三个节拍器：能力本身在产物里，但如果定时器注册没进产物就等于没接线
     ["空闲字符串节拍器", host, "idle-string ticker"],
     ["登录脚本超时节拍器", host, "login-script timeout ticker"],

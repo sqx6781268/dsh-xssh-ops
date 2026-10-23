@@ -1168,4 +1168,9 @@ export const en = {
   "会话不存在或已断开": "The session does not exist or has disconnected",
   "无法确认此 shell 的当前目录": "Could not determine this shell's current directory",
   "未确认空闲交互 shell，无法取得当前目录": "No idle interactive shell was confirmed, so the current directory is unavailable",
+  "发出→首字节 ${fmt(first)}": "issued → first byte ${fmt(first)}",
+  "发出→最后一块 ${fmt(total)}": "issued → last chunk ${fmt(total)}",
+  "台账闭口 ${new Date(record.closedAt).toLocaleTimeString()}": "ledger closed ${new Date(record.closedAt).toLocaleTimeString()}",
+  "[xssh-font] 宽度测量补丁跳过：两种测量相差 ${drift.toFixed(2)}px（可能不是等宽字体）": "[xssh-font] width-measure patch skipped: the two measurements differ by ${drift.toFixed(2)}px (likely not a monospace font)",
+  "[xssh-font] 已启用 canvas 测宽补丁（校准偏差 ${drift.toFixed(2)}px）": "[xssh-font] canvas width-measure patch enabled (calibration drift ${drift.toFixed(2)}px)",
 };

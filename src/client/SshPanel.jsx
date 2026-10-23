@@ -34,6 +34,7 @@ import { insertIntoComposer } from "./chat-bridge.js";
 import { matchesShortcut } from "./shortcut-actions.js";
 import { createTerminalPool } from "./terminal-pool.js";
 import { expandHome, parsePromptCwd as parsePromptPath } from "./prompt-cwd.js";
+import { patchDomRendererWidthCache } from "./dom-width-cache.js";
 import { applyTerminalTheme, createTerminalThemeWatcher, getTerminalTheme } from "./terminal-theme.js";
 import {
   DEFAULT_VIEW_ID,
@@ -260,6 +261,8 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
         try {
           if (term.options.fontFamily !== value.family) term.options.fontFamily = value.family;
         } catch { /* 同上 */ }
+        // 字号变化后补一次（幂等）：若渲染器在别处被重建过，这里能重新挂上 canvas 测宽。
+        try { patchDomRendererWidthCache(term); } catch { /* 忽略 */ }
       }
     } finally {
       const __fontDt = (globalThis.performance?.now?.() ?? Date.now()) - __fontT0;
@@ -402,6 +405,17 @@ function XtermView({ api, sessionId, connectionId, onInsertDraft, onReady, mouse
     } else {
       term.open(container);
     }
+    // 让 DOM 渲染器改用 canvas 量字符宽度（用户 2026-10-24）。
+    // 原实现用 offsetWidth，每个未命中字符触发一次强制布局；本机单次布局约 95.7ms
+    // （页面 266 个样式表 / 13023 条规则），改一次字号要 4–11 秒。补丁后实测 8ms。
+    // 幂等，内部有等宽字体校准，失败时静默保持 xterm 原行为。
+    try {
+      patchDomRendererWidthCache(term, {
+        log: globalThis.localStorage?.getItem("xssh-ops:debug") === "1"
+          ? (...args) => console.info(...args)
+          : null
+      });
+    } catch { /* 补丁失败不影响终端使用 */ }
 
     // 池复用/首次挂载时缓冲区里可能已有提示符：立刻解析一次当前目录。
     // 否则刚打开面板时 terminalCwd 是 null，点 ~ 里的文件名会打不开（用户 2026-10-20）。

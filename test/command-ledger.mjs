@@ -541,4 +541,47 @@ function makeLedger(options = {}) {
     "不注入时刻时 fallback 到内部时钟");
 }
 
-console.log("command ledger: closing criteria, echo-line exclusion, masking, JSONL reload, prune and closedAt all hold");
+// ── 输出时间线（用户 2026-10-24）：台账必须能自证「发出 → 首字节 → 最后一块」 ──
+{
+  const clock = 1_700_000_000_000;
+  const ledger = createCommandLedger({
+    sessionId: "s-timing",
+    seqStart: 1,
+    idleCloseMs: 1500,
+    onRecord: () => {},
+    now: () => clock
+  });
+
+  const record = ledger.open({ text: "ls", markLine: 0 });
+  assert.equal(record.firstOutputAt, null, "刚发出时还没有输出");
+  assert.equal(record.lastOutputAt, null);
+
+  // 首字节在 120ms 后到达
+  ledger.noteOutput({ lastLine: 1, at: clock + 120 });
+  // 后续输出推进 lastOutputAt，但 firstOutputAt 必须保持第一次的时刻
+  ledger.noteOutput({ lastLine: 5, at: clock + 400 });
+  ledger.noteOutput({ lastLine: 9, at: clock + 900 });
+
+  ledger.closeIfIdle({ lastLine: 9, at: clock + 900 + 1500 });
+  const closed = ledger.byId(record.commandId);
+
+  assert.equal(closed.firstOutputAt, new Date(clock + 120).toISOString(),
+    "firstOutputAt 必须是**首个**输出到达时刻，不被后续输出覆盖");
+  assert.equal(closed.lastOutputAt, new Date(clock + 900).toISOString(),
+    "lastOutputAt 必须是最后一块输出");
+  assert.equal(closed.firstOutputMs, 120, "发出→首字节 = 纯响应延迟");
+  assert.equal(closed.durationMs, 900, "发出→最后一块 = 纯执行时间（不含闭口等待）");
+  assert.equal(closed.closedAt, new Date(clock + 2400).toISOString(),
+    "closedAt 仍含空闲闭口，与 durationMs 语义分开");
+
+  // 完全没有输出的命令：firstOutputAt/lastOutputAt 保持 null，且不产生伪造的 0ms 耗时
+  const empty = ledger.open({ text: ": ;", markLine: 10 });
+  ledger.closeIfIdle({ lastLine: 10, at: clock + 5000 });
+  const emptyClosed = ledger.byId(empty.commandId);
+  assert.equal(emptyClosed.firstOutputAt, null, "无输出时不得编造首字节时间");
+  assert.equal(emptyClosed.firstOutputMs, undefined, "无输出时不得编造 firstOutputMs");
+  assert.equal(emptyClosed.durationMs, undefined,
+    "无输出时不得编造 durationMs —— 让排查者一眼看出「这条命令没有任何输出」，而不是看到一个假的 0");
+}
+
+console.log("command ledger: closing criteria, echo-line exclusion, masking, JSONL reload, prune, closedAt and output timeline all hold");

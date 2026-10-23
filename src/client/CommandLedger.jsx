@@ -32,6 +32,31 @@ const STATUS_STYLE = {
 };
 // i18n-identifier-end
 
+/**
+ * 命令耗时文案（用户 2026-10-24）：把台账的 firstOutputMs / durationMs 变成
+ * 一眼能读的字符串。语义分开写，避免把「闭口等待」误当成执行时间：
+ *   firstOutputMs = 命令发出 → 首字节输出（响应延迟）
+ *   durationMs    = 命令发出 → 最后一块输出（纯执行时间，不含空闲闭口）
+ * @param {object} record 台账记录
+ * @returns {{label: string, title: string}|null} 无输出或没有耗时数据时返回 null（不编造 0）
+ */
+function timingLabel(record) {
+  const first = typeof record.firstOutputMs === "number" ? record.firstOutputMs : null;
+  const total = typeof record.durationMs === "number" ? record.durationMs : null;
+  if (first === null && total === null) return null;
+  const fmt = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`);
+  const parts = [];
+  if (first !== null) parts.push(`↵${fmt(first)}`);
+  if (total !== null && (first === null || total !== first)) parts.push(`Σ${fmt(total)}`);
+  const label = parts.join(" / ");
+  const title = [
+    first !== null ? t(`发出→首字节 ${fmt(first)}`) : null,
+    total !== null ? t(`发出→最后一块 ${fmt(total)}`) : null,
+    record.closedAt ? t(`台账闭口 ${new Date(record.closedAt).toLocaleTimeString()}`) : null
+  ].filter(Boolean).join("\n");
+  return { label, title };
+}
+
 /** `HH:MM`（本地时区）——完整日期在 title 里，避免窄边栏被时间吃掉宽度。 */
 function shortTime(iso) {
   const date = new Date(iso);
@@ -138,6 +163,8 @@ export function CommandLedger({ api, sessionId, visible = true, onJump }) {
     cardSelected: { borderColor: "#2d6cdf" },
     command: { fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 12, lineHeight: "17px", whiteSpace: "pre-wrap", wordBreak: "break-all", color: "var(--dsh-xssh-ops-text, #d7dbe2)" },
     meta: { display: "flex", alignItems: "center", gap: 6, marginTop: 3, fontSize: 10, color: "var(--dsh-xssh-ops-muted, #8b93a1)" },
+    // 耗时（用户 2026-10-24）：等宽字体便于竖排比对，颜色区别于普通元信息。
+    timing: { fontFamily: "ui-monospace, Consolas, monospace", color: "var(--dsh-xssh-ops-timing, #9ecb8f)", cursor: "help" },
     idText: { fontFamily: "ui-monospace, Consolas, monospace", opacity: 0, transition: "opacity .12s ease", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
     idVisible: { opacity: 1 },
     spacer: { flex: 1, minWidth: 4 },
@@ -175,6 +202,9 @@ export function CommandLedger({ api, sessionId, visible = true, onJump }) {
         {commands.map((record) => {
           const status = STATUS_STYLE[record.status] ?? STATUS_STYLE.unknown;
           const selected = record.commandId === selectedId;
+          // 只算一次：耗时文案每次都要 t() 与本地时间格式化，重复调用会让条件、title、
+          // 正文落在不同的秒上（用户 2026-10-24）。
+          const timing = timingLabel(record);
           return (
             <div
               key={record.commandId}
@@ -195,6 +225,9 @@ export function CommandLedger({ api, sessionId, visible = true, onJump }) {
                 <span>·</span>
                 <span style={{ color: status.color }}>{t(status.label)}</span>
                 {record.exitCode !== null && <span>· exit {record.exitCode}</span>}
+                {timing !== null && (
+                  <span title={timing.title} style={styles.timing}>· {timing.label}</span>
+                )}
                 {record.truncated === true && <span>· {t("区间已被淘汰")}</span>}
                 <span
                   style={selected ? { ...styles.idText, ...styles.idVisible } : styles.idText}

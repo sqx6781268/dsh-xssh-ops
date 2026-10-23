@@ -113,6 +113,14 @@ export function createCommandLedger({
     // 闭口时间可注入：调用方（如 closeIfIdle 的判定、测试）已经知道"现在"是什么时刻，
     // 再用模块内部的 now() 会造成两处时间线不一致（判定用注入值、记录用当前值）。
     record.closedAt = new Date(Number.isFinite(at) ? at : now()).toISOString();
+    // 派生耗时（用户 2026-10-24）：只算真实数据往返，不含闭口等待。
+    const issuedMs = Date.parse(record.issuedAt ?? "");
+    if (Number.isFinite(issuedMs)) {
+      const firstMs = Date.parse(record.firstOutputAt ?? "");
+      const lastMs = Date.parse(record.lastOutputAt ?? "");
+      if (Number.isFinite(firstMs)) record.firstOutputMs = firstMs - issuedMs;
+      if (Number.isFinite(lastMs)) record.durationMs = lastMs - issuedMs;
+    }
     if (openId === record.commandId) openId = null;
     emit(record, "update");
     return record;
@@ -170,7 +178,13 @@ export function createCommandLedger({
         exitCode: null,
         closedBy: null,
         truncated: false,
-        closedAt: null
+        closedAt: null,
+        // 输出到达时间（用户 2026-10-24）：台账要能自证「命令发出 → 结果回来」的耗时。
+        // issuedAt 是 host 收到命令的时刻，firstOutputAt 是**首字节输出**到达的时刻，
+        // 两者之差就是纯响应延迟；lastOutputAt 是最后一块输出，与 issuedAt 之差是纯执行时间
+        // （都不含台账的空闲闭口等待，闭口等待见 closedAt）。
+        firstOutputAt: null,
+        lastOutputAt: null
       };
       records.set(record.commandId, record);
       openId = record.commandId;
@@ -185,7 +199,10 @@ export function createCommandLedger({
       if (openId === null) return null;
       const record = get(openId);
       if (record === null) return null;
-      lastOutputAt = Number.isFinite(at) ? at : now();
+      const stamp = Number.isFinite(at) ? at : now();
+      lastOutputAt = stamp;
+      if (record.firstOutputAt === null) record.firstOutputAt = new Date(stamp).toISOString();
+      record.lastOutputAt = new Date(stamp).toISOString();
       if (Number.isSafeInteger(lastLine)) record.lastLine = lastLine;
       return record;
     },

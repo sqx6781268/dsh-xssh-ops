@@ -8,7 +8,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![DSH](https://img.shields.io/badge/DeepSeek%20Harness-plugin-blue)
-![version](https://img.shields.io/badge/version-0.1.7-blue)
+![version](https://img.shields.io/badge/version-0.1.8-blue)
 
 ## 功能
 
@@ -86,11 +86,11 @@ dsh plugin --profile <你的profile> add <本仓库路径>
 
 ```powershell
 # A. 解压后按目录安装
-tar -xzf dsh-xssh-ops-0.1.7.tar.gz
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7
+tar -xzf dsh-xssh-ops-0.1.8.tar.gz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.8
 
 # B. 直接装 npm tarball
-dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7.tgz
+dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.8.tgz
 ```
 
 安装包内已包含构建好的 `lib/`（host / client / typert / remote 与 Monaco、file-viewer 的本地组件），目标机器无需再 `npm install` 或构建。
@@ -172,6 +172,13 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7.tgz
 
 ## 更新记录（近期）
 
+### 2026-10-24 · v0.1.8 —— 命令台账耗时自证 + 终端测宽提速
+
+- **台账能自证耗时**：每条命令新增「发出→首字节」与「发出→最后一块输出」，都不含空闲闭口等待；列表显示 `↵120ms / Σ900ms`，悬停看本地时间线。无输出的命令不编造 0ms。
+- **改字号不再卡**：xterm DOM 渲染器改用 canvas 测宽，规避每字符一次的强制布局（本机单次 ≈95.7ms）；实测改一次字号 4–11 秒 → 约 8ms。非等宽字体或校准偏差过大时自动放弃，保持原行为。
+- **防摇掉**：新模块登记进 `wiring-audit` 并对产物断言符号，源码 review 与界面都看不出的「只 import 不调用」不再复发。
+- **验证**：129 项测试（新增 `test/dom-width-cache.mjs`）、构建、lint、i18n 通过；真机体感待装新版后目视。细节见 [优化记录](docs/2026-10-24-命令耗时与终端测宽优化.md)。
+
 ### 2026-10-23 · v0.1.7 —— SOCKS 代理选择与功能回归修复
 
 - **代理库入口**：新增/编辑服务器中直接选择已保存 SOCKS5 代理，手填字段仍可折叠；修复清除代理密码与切换免认证代理残留旧密码。
@@ -244,7 +251,7 @@ dsh plugin --profile <你的profile> add .\dsh-xssh-ops-0.1.7.tgz
 cd repo
 npm install
 npm run build      # 生成 xterm 样式 + host(lib/index.js) + client(lib/client.js)
-npm test           # 121 个测试（含真实 SSH 的端到端套件）
+npm test           # 129 个测试（node --test；真实 SSH 的端到端在 npm run test:e2e）
 npm run lint       # eslint 必须退 0
 node scripts/i18n-extract.mjs   # 中英词条覆盖检查
 ```

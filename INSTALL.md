@@ -5,11 +5,11 @@
 ## 0. 前置条件
 
 - 已安装并运行 **DSH Desktop**。
-- 已取得成品包 `dsh-xssh-ops-0.1.7.tgz`（来源：GitHub Releases 下载，或源码 `npm run pack:release` 构建产物 `release/` 下）。
+- 已取得成品包 `dsh-xssh-ops-0.1.8.tgz`（来源：GitHub Releases 下载，或源码 `npm run pack:release` 构建产物 `release/` 下）。
 
 ### 兼容性
 
-- v0.1.7 已在本机 DSH `0.2.1-rc.2` 的 Web profile 验收；使用者仍需核对目标宿主提供下列服务。
+- v0.1.7 已在本机 DSH `0.2.1-rc.2` 的 Web profile 验收；v0.1.8 沿用同一安装路径与同一宿主契约（本轮变化只在命令台账显示与终端测宽，不改安装面），使用者仍需核对目标宿主提供下列服务。
 - 宿主须提供 `sidebarRightTabs` 和 `sidebarRight`；SSH 以官方右侧标签运行，旧宿主（缺这两个 API）不再有浮动面板回退——宿主半工具照常可用，但没有终端 UI。
 - 上传／下载字节流需要 Web Profile 的 `webServer` 与请求来源校验服务；不具备时保留既有 SFTP 操作。目录归档下载被有意禁用并返回 `501`，防止 SFTP chroot 与 SSH shell 命名空间不一致。
 
@@ -36,13 +36,13 @@ $dsh  = "<INSTALL_DIR>\DSH Desktop\resources\app\node_modules\@deepseek-ai\dsh\l
 把 `<TARBALL>` 替换为 tgz 的绝对路径。
 
 ```powershell
-dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.7.tgz"
+dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.8.tgz"
 ```
 
 若 `dsh` 不在 PATH，用：
 
 ```powershell
-& $node $dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.7.tgz"
+& $node $dsh plugin --profile web add "<TARBALL>\dsh-xssh-ops-0.1.8.tgz"
 ```
 
 ## 3. 校验安装结果

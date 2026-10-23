@@ -886,7 +886,14 @@ export const commandRecordSchema = z.object({
   endLine: z.number().int().nullable(),
   exitCode: z.number().int().nullable(),
   closedBy: z.string().nullable(),
-  truncated: z.boolean()
+  truncated: z.boolean(),
+  // 时间线（用户 2026-10-24）：让台账自证「命令发出 → 结果收到」的耗时。
+  // issuedAt 已有；以下三项是输出到达时刻与派生耗时（毫秒，均不含空闲闭口等待）。
+  closedAt: z.string().nullable().optional(),
+  firstOutputAt: z.string().nullable().optional(),
+  lastOutputAt: z.string().nullable().optional(),
+  firstOutputMs: z.number().optional(),
+  durationMs: z.number().optional()
 });
 
 export const commandListRequestSchema = z.object({
